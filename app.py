@@ -19,13 +19,35 @@ st.set_page_config(page_title="PapoW Board", layout="wide")
 
 
 # ---------- auth ----------
+def _secret(key: str) -> str | None:
+    """Read a secret; None when the secrets file is missing or is not valid TOML."""
+    try:
+        v = st.secrets.get(key)
+        return str(v) if v else None
+    except Exception:
+        return None
+
+
+_SECRETS_HELP = '''DATABASE_URL = "postgresql+psycopg://USER:PASSWORD@HOST:PORT/DBNAME"
+APP_PASSWORD = "your-password-here"'''
+
+
 def _gate() -> bool:
     if st.session_state.get("auth_ok"):
         return True
     st.title("PapoW Board")
+    app_pw = _secret("APP_PASSWORD")
+    if app_pw is None or _secret("DATABASE_URL") is None:
+        st.error("Secrets are missing or not valid TOML. In Streamlit Cloud: **Manage app → "
+                 "Settings → Secrets**, delete everything there and paste EXACTLY this shape — "
+                 "every value wrapped in straight double quotes (\"), one per line:")
+        st.code(_SECRETS_HELP, language="toml")
+        st.caption("Common causes: missing quotes around a value, or “smart quotes” pasted from "
+                   "Word/WhatsApp instead of plain \" quotes. Save, then reboot the app.")
+        st.stop()
     pw = st.text_input("Password", type="password")
     if pw:
-        if pw == st.secrets.get("APP_PASSWORD", ""):
+        if pw == app_pw:
             st.session_state["auth_ok"] = True
             st.rerun()
         else:
@@ -37,7 +59,11 @@ def _gate() -> bool:
 # ---------- data ----------
 @st.cache_resource
 def _engine():  # type: ignore[no-untyped-def]
-    return create_engine(st.secrets["DATABASE_URL"], pool_pre_ping=True)
+    url = _secret("DATABASE_URL")
+    if not url:
+        st.error("DATABASE_URL is missing from Secrets — see the login screen for the format.")
+        st.stop()
+    return create_engine(url, pool_pre_ping=True)
 
 
 @st.cache_data(ttl=600, show_spinner=False)
