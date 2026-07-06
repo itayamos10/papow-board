@@ -8,6 +8,7 @@ dashboard; nothing here is investment advice and nothing places orders.
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import date
 from typing import Any
 
@@ -250,12 +251,56 @@ def _improvement_tab() -> None:
         st.divider()
 
 
+def _ozbeki_tab() -> None:
+    st.caption("הדבק כאן את הסקירה היומית של אוזבקי. הטקסט נשמר במסד הנתונים; מנוע המחקר "
+               "(הריצה הלילית, 23:15) מפענח אותו ומייצר הצעות שינוי לאישורך בטאב Improvement.")
+    when = st.date_input("תאריך הסקירה", value=date.today()).isoformat()
+    txt = st.text_area("טקסט הסקירה", height=280, placeholder="הדבק את הסקירה המלאה כאן…")
+    if st.button("📥 שמור לפענוח"):
+        if not txt.strip():
+            st.warning("אין טקסט להדבקה")
+        else:
+            rid = f"ozbeki:{when}:{uuid.uuid4().hex[:6]}"
+            with _engine().begin() as c:
+                c.execute(text(
+                    'create table if not exists review_inbox (id text primary key, date text, '
+                    'source text, raw_text text, status text, result_json text)'))
+                c.execute(text(
+                    'insert into review_inbox (id, date, source, raw_text, status, result_json) '
+                    "values (:i, :d, 'ozbeki', :r, 'pending', '{}')"),
+                    {"i": rid, "d": when, "r": txt})
+            st.success(f"נשמר ({rid}) — יפוענח בריצת המנוע הבאה, וההצעות יופיעו ב-Improvement")
+    st.divider()
+    st.markdown("**סטטוס הדבקות אחרונות**")
+    try:
+        with _engine().connect() as c:
+            rows = c.execute(text(
+                'select id, date, status, result_json from review_inbox '
+                'order by date desc, id desc limit 10')).fetchall()
+    except Exception:
+        rows = []
+    if rows:
+        recs = []
+        for r in rows:
+            res = json.loads(r[3] or "{}")
+            recs.append({"id": r[0], "date": r[1],
+                         "status": {"pending": "⏳ ממתין לפענוח", "processed": "✅ פוענח",
+                                    "failed": "🔴 נכשל"}.get(r[2], r[2]),
+                         "insights": res.get("n_insights", "—"),
+                         "CCs": ", ".join(res.get("ccs") or []) or "—",
+                         "note": res.get("reason") or ""})
+        st.dataframe(pd.DataFrame(recs), use_container_width=True, hide_index=True)
+    else:
+        st.caption("עוד לא הודבקו סקירות.")
+
+
 def main() -> None:
     _gate()
     st.title("PapoW Board — read-only viewer")
     st.caption("🧪 DEMO / PAPER research dashboard. Renders pre-computed snapshots only; contains "
                "no strategy logic; never places orders; not investment advice.")
-    tabs = st.tabs(["🎰 Slots", "🧭 Deal Desk", "📋 Watchlists", "🌍 Leadership", "🛠 Improvement"])
+    tabs = st.tabs(["🎰 Slots", "🧭 Deal Desk", "📋 Watchlists", "🌍 Leadership",
+                    "🛠 Improvement", "📖 Ozbeki"])
     with tabs[0]:
         _slots_tab()
     with tabs[1]:
@@ -266,6 +311,8 @@ def main() -> None:
         _leadership_tab()
     with tabs[4]:
         _improvement_tab()
+    with tabs[5]:
+        _ozbeki_tab()
 
 
 main()
