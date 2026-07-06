@@ -251,31 +251,67 @@ def _improvement_tab() -> None:
         st.divider()
 
 
+def _inbox_insert(when: str, txt: str, kind: str, images: list[str]) -> str:
+    rid = f"ozbeki:{when}:{uuid.uuid4().hex[:6]}"
+    with _engine().begin() as c:
+        c.execute(text(
+            'create table if not exists review_inbox (id text primary key, date text, '
+            "source text, kind text default 'daily_review', raw_text text, "
+            "images_json text default '[]', status text, result_json text)"))
+        c.execute(text("alter table review_inbox add column if not exists kind text "
+                       "default 'daily_review'"))
+        c.execute(text("alter table review_inbox add column if not exists images_json text "
+                       "default '[]'"))
+        c.execute(text(
+            'insert into review_inbox (id, date, source, kind, raw_text, images_json, status, '
+            "result_json) values (:i, :d, 'ozbeki', :k, :r, :img, 'pending', '{}')"),
+            {"i": rid, "d": when, "k": kind, "r": txt, "img": json.dumps(images)})
+    return rid
+
+
 def _ozbeki_tab() -> None:
-    st.caption("הדבק כאן את הסקירה היומית של אוזבקי. הטקסט נשמר במסד הנתונים; מנוע המחקר "
-               "(הריצה הלילית, 23:15) מפענח אותו ומייצר הצעות שינוי לאישורך בטאב Improvement.")
-    when = st.date_input("תאריך הסקירה", value=date.today()).isoformat()
-    txt = st.text_area("טקסט הסקירה", height=280, placeholder="הדבק את הסקירה המלאה כאן…")
-    if st.button("📥 שמור לפענוח"):
-        if not txt.strip():
-            st.warning("אין טקסט להדבקה")
-        else:
-            rid = f"ozbeki:{when}:{uuid.uuid4().hex[:6]}"
-            with _engine().begin() as c:
-                c.execute(text(
-                    'create table if not exists review_inbox (id text primary key, date text, '
-                    'source text, raw_text text, status text, result_json text)'))
-                c.execute(text(
-                    'insert into review_inbox (id, date, source, raw_text, status, result_json) '
-                    "values (:i, :d, 'ozbeki', :r, 'pending', '{}')"),
-                    {"i": rid, "d": when, "r": txt})
-            st.success(f"נשמר ({rid}) — יפוענח בריצת המנוע הבאה, וההצעות יופיעו ב-Improvement")
+    st.caption("קלט למידה מאוזבקי — נשמר במסד הנתונים; מנוע המחקר (הריצה הלילית, 23:15) מפענח. "
+               "עזר-כיול בלבד: המערכת בודקת את עצמה מולו, לא מאמצת את החשיבה שלו.")
+    mode = st.radio("סוג הקלט", ["📄 סקירה יומית (טקסט)", "📈 תמונה תוך-יומית + טקסט קצר"],
+                    horizontal=True)
+    when = st.date_input("תאריך", value=date.today()).isoformat()
+    if mode.startswith("📄"):
+        txt = st.text_area("טקסט הסקירה", height=280, placeholder="הדבק את הסקירה המלאה כאן…")
+        if st.button("📥 שמור לפענוח"):
+            if not txt.strip():
+                st.warning("אין טקסט להדבקה")
+            else:
+                rid = _inbox_insert(when, txt, "daily_review", [])
+                st.success(f"נשמר ({rid}) — יפוענח בריצת המנוע הבאה, וההצעות יופיעו "
+                           "ב-Improvement")
+    else:
+        st.caption("צילומי גרפים שהוא מפרסם במהלך היום. תמונה בודדת לעולם לא משנה לוגיקה — "
+                   "רק בדיקת פוקוס: 'הוא עוקב אחרי X — למה הרשימות שלנו פספסו?'")
+        files = st.file_uploader("תמונות (עד 4)", type=["png", "jpg", "jpeg"],
+                                 accept_multiple_files=True)
+        cap = st.text_area("הטקסט הקצר שצירף", height=100)
+        if st.button("📥 שמור סניפט לפענוח"):
+            imgs: list[str] = []
+            for f in (files or [])[:4]:
+                raw = f.getvalue()
+                if len(raw) > 4_000_000:
+                    st.warning(f"{f.name} גדול מ-4MB — דולג")
+                    continue
+                import base64
+                ext = (f.name.rsplit(".", 1)[-1] or "png").lower()
+                ext = "jpeg" if ext == "jpg" else ext
+                imgs.append(f"data:image/{ext};base64,{base64.b64encode(raw).decode()}")
+            if not imgs and not cap.strip():
+                st.warning("אין תמונה ואין טקסט")
+            else:
+                rid = _inbox_insert(when, cap, "intraday_snippet", imgs)
+                st.success(f"נשמר ({rid}, {len(imgs)} תמונות) — בדיקת-פוקוס תרוץ הלילה")
     st.divider()
     st.markdown("**סטטוס הדבקות אחרונות**")
     try:
         with _engine().connect() as c:
             rows = c.execute(text(
-                'select id, date, status, result_json from review_inbox '
+                'select id, date, status, result_json, kind from review_inbox '
                 'order by date desc, id desc limit 10')).fetchall()
     except Exception:
         rows = []
@@ -283,10 +319,13 @@ def _ozbeki_tab() -> None:
         recs = []
         for r in rows:
             res = json.loads(r[3] or "{}")
+            focus = res.get("focus") or {}
             recs.append({"id": r[0], "date": r[1],
+                         "סוג": "📈 סניפט" if r[4] == "intraday_snippet" else "📄 סקירה",
                          "status": {"pending": "⏳ ממתין לפענוח", "processed": "✅ פוענח",
                                     "failed": "🔴 נכשל"}.get(r[2], r[2]),
                          "insights": res.get("n_insights", "—"),
+                         "focus": ", ".join(f"{t}:{s}" for t, s in focus.items()) or "—",
                          "CCs": ", ".join(res.get("ccs") or []) or "—",
                          "note": res.get("reason") or ""})
         st.dataframe(pd.DataFrame(recs), use_container_width=True, hide_index=True)
