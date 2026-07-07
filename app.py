@@ -149,7 +149,12 @@ def _slots_tab() -> None:
         st.markdown("**The ladder** (long-only)")
         st.dataframe(pd.DataFrame([{
             "state": _STATE_HE.get(r["state"], r["state"]), "ticker": r["ticker"],
-            "בשלות": r.get("maturity") or "—", "thesis": r.get("thesis") or "—",
+            "בשלות": r.get("maturity") or "—",
+            "טריות": {"fresh": "🟢 טרי", "aging": "🟡 מזדקן", "stale": "🔴 רקוב"}.get(
+                str(r.get("freshness")),
+                "—") + (f" (יום {r['signal_age_days']})"
+                        if r.get("signal_age_days") is not None else ""),
+            "thesis": r.get("thesis") or "—",
             "character": r.get("char_class") or "—", "technique": r.get("technique") or "—",
             "entry": r.get("entry_level") or "—",
             "SL": f"{r['sl_price']} ({r['sl_pct']}%)" if r.get("sl_price") else "—",
@@ -169,6 +174,10 @@ def _slots_tab() -> None:
                     st.markdown(f"- `{k}`: {v}")
                 if r.get("prior"):
                     st.caption(f"prior (in-sample): {r['prior']}")
+    gone = board.get("departed_since_prev") or []
+    if gone:
+        st.info("🚪 עזבו את הצנרת מאתמול: "
+                + " · ".join(f"**{g['ticker']}** — {g['reason']}" for g in gone))
     m = acct.get("metrics") or {}
     st.caption(f"account (paper): equity {m.get('terminal_equity')} · withdrawn "
                f"{m.get('withdrawn')} · net {m.get('return_vs_deposit')}")
