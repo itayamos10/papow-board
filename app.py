@@ -224,6 +224,21 @@ def _leadership_tab() -> None:
                                 "stage": c.get("move_stage")}
                                for c in m.get("stock_leaders", [])]),
                  use_container_width=True, hide_index=True)
+    ev = m.get("external_voice") or {}
+    if ev.get("stances"):
+        st.markdown("**🗣️ קול חיצוני (אוזבקי) — מוצג לכיול, לא מאומץ**")
+        for s in ev["stances"][:5]:
+            flips = f" · {s['flips']} היפוכים" if s.get("flips") else ""
+            st.markdown(f"- **{s['subject']}**: {s.get('direction_he', s['direction'])} "
+                        f"({s['days_seen']} ימים{flips}) — {s['statement']}")
+        sb = ev.get("scoreboard") or {}
+        if sb.get("n_scored"):
+            st.caption(f"לוח כיול שלו: {sb['n_scored']} קריאות, פגיעה {sb['hit_rate']:.0%} "
+                       f"({sb.get('pending', 0)} ממתינות)")
+        ov = ev.get("watchlist_overlap") or {}
+        if ov.get("his_n"):
+            st.caption(f"הרשימה שלו: {ov['his_n']} שמות, {ov['covered']} מכוסים אצלנו"
+                       + (f" · חסרים: {', '.join(ov['missing'])}" if ov.get("missing") else ""))
     for k, v in (m.get("caveats") or {}).items():
         st.caption(f"⚠️ {k}: {v}")
 
