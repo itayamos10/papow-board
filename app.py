@@ -218,6 +218,26 @@ def _watchlists_tab() -> None:
 
 def _leadership_tab() -> None:
     m = _latest("leadership_snapshots") or {}
+    tape = m.get("tape_story") or {}
+    if tape.get("market_paragraph"):
+        st.markdown("**📰 סיפור היום — חדשות מול תנועה**")
+        st.info(tape["market_paragraph"])
+        if tape.get("stocks_paragraph"):
+            st.info(tape["stocks_paragraph"])
+        led = tape.get("alignment_ledger") or {}
+        if led.get("n_assets"):
+            st.caption(f"מאזן: {led.get('confirmed', 0)} מגובי-חדשות · "
+                       f"{led.get('contradicted', 0)} בניגוד · "
+                       f"{led.get('no_news_move', 0)} בלי סיפור — היפותזה פתוחה, הקשר בלבד")
+        with st.expander("🔬 ניתוח פר-נכס (נרות, שחקנים, לוגיקת סוחרים)"):
+            for a in tape.get("assets", []):
+                if a.get("status") != "analyzed":
+                    continue
+                pl = ", ".join(p.get("type", "?") for p in a.get("players", []))
+                st.markdown(f"**{a['ticker']}** ({a['facts']['change_pct']:+.2f}%, "
+                            f"{a.get('alignment')}) — {a.get('narrative')}\n\n"
+                            f"_לוגיקת הסוחרים:_ {a.get('trader_logic')}  \n"
+                            f"_שחקנים:_ {pl} · ביטחון: {a.get('confidence')}")
     story = m.get("market_story") or {}
     if story.get("narrative"):
         st.info(story["narrative"])
