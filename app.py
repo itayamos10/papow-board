@@ -310,10 +310,20 @@ def _inbox_insert(when: str, txt: str, kind: str, images: list[str]) -> str:
 def _ozbeki_tab() -> None:
     st.caption("קלט למידה מאוזבקי — נשמר במסד הנתונים; מנוע המחקר (הריצה הלילית, 23:15) מפענח. "
                "עזר-כיול בלבד: המערכת בודקת את עצמה מולו, לא מאמצת את החשיבה שלו.")
-    mode = st.radio("סוג הקלט", ["📄 סקירה יומית (טקסט)", "📈 תמונה תוך-יומית + טקסט קצר"],
+    mode = st.radio("סוג הקלט", ["📄 סקירה יומית (טקסט)", "📈 תמונה תוך-יומית + טקסט קצר", "🧪 מחקר/מאמר (השראה לאסטרטגיה)"],
                     horizontal=True)
     when = st.date_input("תאריך", value=date.today()).isoformat()
-    if mode.startswith("📄"):
+    if mode.startswith("🧪"):
+        st.caption("מאמר/מחקר מעניין — המנוע מחלץ רעיונות ישימים עם חוזה-אינטגרציה מלא; כל "
+                   "רעיון הופך להצעה ב-Improvement. השראה לבדיקה-מחדש, לעולם לא להעתקה.")
+        txt = st.text_area("הדבק את המחקר/המאמר (או תקציר+לינק)", height=280)
+        if st.button("📥 שמור מחקר לפענוח"):
+            if not txt.strip():
+                st.warning("אין טקסט")
+            else:
+                rid = _inbox_insert(when, txt, "research", [])
+                st.success(f"נשמר ({rid}) — יפוענח בריצת-הלילה; הצעות יופיעו ב-Improvement")
+    elif mode.startswith("📄"):
         txt = st.text_area("טקסט הסקירה", height=280, placeholder="הדבק את הסקירה המלאה כאן…")
         if st.button("📥 שמור לפענוח"):
             if not txt.strip():
