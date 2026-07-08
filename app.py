@@ -178,6 +178,28 @@ def _slots_tab() -> None:
     if gone:
         st.info("🚪 עזבו את הצנרת מאתמול: "
                 + " · ".join(f"**{g['ticker']}** — {g['reason']}" for g in gone))
+    with st.expander("📓 פנקס-העסקאות שלי — רישום עסקת-אמת (D1)"):
+        st.caption("רישום בלבד; המנוע מצרף בלילה את מה שהמכונה אמרה באותו יום, ובסגירה — "
+                   "תוצאה ו-post-mortem. לא ייעוץ, לא פקודה.")
+        c1, c2, c3, c4 = st.columns(4)
+        tk = c1.text_input("טיקר", key="mt_tk").upper().strip()
+        side = c2.selectbox("צד", ["buy", "sell"], key="mt_side")
+        px = c3.number_input("מחיר", min_value=0.0, step=0.01, key="mt_px")
+        qty = c4.number_input("כמות", min_value=0.0, step=1.0, key="mt_qty")
+        note = st.text_input("הערה (למה?)", key="mt_note")
+        if st.button("📥 רשום עסקה") and tk and px > 0:
+            rid = f"{date.today().isoformat()}:{tk}:{side}:{uuid.uuid4().hex[:4]}"
+            with _engine().begin() as c:
+                c.execute(text(
+                    'create table if not exists my_trades (id text primary key, date text, '
+                    'ticker text, side text, price float, qty float, note text, '
+                    "machine_json text default '{}', outcome_json text default '{}')"))
+                c.execute(text(
+                    'insert into my_trades (id, date, ticker, side, price, qty, note) '
+                    'values (:i, :d, :t, :s, :p, :q, :n)'),
+                    {"i": rid, "d": date.today().isoformat(), "t": tk, "s": side,
+                     "p": px, "q": qty, "n": note})
+            st.success(f"נרשם ({rid}) — ההעשרה בריצת-הלילה")
     m = acct.get("metrics") or {}
     st.caption(f"account (paper): equity {m.get('terminal_equity')} · withdrawn "
                f"{m.get('withdrawn')} · net {m.get('return_vs_deposit')}")
