@@ -260,7 +260,11 @@ def _leadership_tab() -> None:
 def _improvement_tab() -> None:
     st.caption("Approve = log + monitor + queue. NOTHING auto-applies; approved changes are "
                "implemented in a batch when the logic engine opens.")
-    for ch in _changes():
+    allc = _changes()
+    active = [c for c in allc if c["status"] in ("proposed", "approved")]
+    archived = [c for c in allc if c["status"] not in ("proposed", "approved")]
+    st.markdown(f"**פעילים ({len(active)})** — רק מה שדורש/מחכה להחלטה")
+    for ch in active:
         st.markdown(f"**{ch['id']} — {ch['title']}**  \nstatus: `{ch['status']}` · "
                     f"still_present: {ch.get('still_present')}")
         with st.expander("details"):
@@ -278,6 +282,11 @@ def _improvement_tab() -> None:
                     _decide(ch["id"], False, reason)
                     st.rerun()
         st.divider()
+    with st.expander(f"🗄️ ארכיון ({len(archived)}) — הוכרעו/יושמו; להשוואה, לא להחלטה"):
+        for ch in archived:
+            st.markdown(f"`{ch['status']}` **{ch['id']}** — {ch['title']}"
+                        + (f"  \n_{ch['dismissed_reason']}_" if ch.get("dismissed_reason")
+                           else ""))
 
 
 def _inbox_insert(when: str, txt: str, kind: str, images: list[str]) -> str:
