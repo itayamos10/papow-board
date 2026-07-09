@@ -16,7 +16,75 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import create_engine, text
 
-st.set_page_config(page_title="PapoW Board", layout="wide")
+st.set_page_config(page_title="PAPOW — the board", page_icon="🎯", layout="wide")
+
+# ---------- PAPOW brand (docs/brand/BRAND.md in the core repo) ----------
+_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;600;800&display=swap');
+html, body, [data-testid="stAppViewContainer"] { background:#0B0F1A !important; }
+[data-testid="stHeader"] { background:rgba(11,15,26,.6) !important; }
+h1,h2,h3,h4 { color:#F2F5FA !important; font-family:Inter,'Segoe UI',sans-serif; }
+p, li, span, label, .stMarkdown { color:#C9D2E3; }
+.papow-word { font-family:'Archivo Black','Arial Black',sans-serif; font-size:44px;
+  letter-spacing:2px; color:#F2F5FA; line-height:1; }
+.papow-word .hit { color:#C8FF37; }
+.papow-tag { color:#8B96AC; font-size:13px; margin-top:4px; letter-spacing:.5px; }
+.papow-ribbon { display:flex; gap:10px; flex-wrap:wrap; margin:14px 0 4px; }
+.papow-chip { background:#141B2E; border:1px solid #232E4A; border-radius:999px;
+  padding:6px 14px; font-size:13px; color:#C9D2E3; }
+.papow-chip b { color:#F2F5FA; }
+.papow-chip.volt { border-color:#C8FF37; color:#C8FF37; }
+.papow-chip.gold { border-color:#FFC24B; color:#FFC24B; }
+.papow-chip.coral { border-color:#FF4D5E; color:#FF6D7C; }
+.papow-card { background:#141B2E; border:1px solid #232E4A; border-radius:14px;
+  padding:14px 16px; margin:6px 0; }
+.papow-card .tkr { font-weight:800; font-size:17px; color:#F2F5FA; }
+.papow-card .sub { color:#8B96AC; font-size:12.5px; margin-top:2px; }
+.papow-key { display:inline-block; border-radius:6px; padding:1px 8px; font-size:12px;
+  margin-left:4px; border:1px solid #232E4A; }
+.papow-key.on  { background:rgba(200,255,55,.12); color:#C8FF37; border-color:#C8FF37; }
+.papow-key.off { background:rgba(255,77,94,.10); color:#FF6D7C; border-color:#FF4D5E; }
+.papow-stage { color:#FFC24B; font-size:12px; letter-spacing:1px; }
+[data-testid="stMetric"] { background:#141B2E; border:1px solid #232E4A;
+  border-radius:14px; padding:12px 14px; }
+[data-testid="stMetricValue"] { color:#F2F5FA !important; }
+button[data-baseweb="tab"] { font-weight:600; }
+</style>
+"""
+
+
+def _hero(sub: str = "") -> None:
+    st.markdown(_CSS, unsafe_allow_html=True)
+    st.markdown('<div class="papow-word">PAP<span class="hit">O</span>W</div>'
+                '<div class="papow-tag">AIM · TRACK · <b>PAPOW.</b> &nbsp;·&nbsp; '
+                'רואים · עוקבים · פוגעים' + (f' &nbsp;·&nbsp; {sub}' if sub else '')
+                + '</div>', unsafe_allow_html=True)
+
+
+def _ribbon() -> None:
+    chips = []
+    lead = _latest("leadership_snapshots") or {}
+    acct = _latest("account_snapshots") or {}
+    mr = lead.get("market_regime") or {}
+    if lead.get("date"):
+        chips.append(f'<span class="papow-chip">🗓 <b>{lead.get("date")}</b></span>')
+    if mr.get("regime_type"):
+        frag = str(mr.get("market_fragility"))
+        cls = "coral" if frag in ("high", "elevated") else "volt"
+        chips.append(f'<span class="papow-chip {cls}">🧭 {mr.get("regime_type")} · '
+                     f'{frag}</span>')
+    eq = (acct.get("metrics") or {}).get("terminal_equity")
+    if eq:
+        chips.append(f'<span class="papow-chip">💼 ₪<b>{eq:,.0f}</b></span>')
+    vipq = _latest_note("vip_board")
+    if vipq:
+        cap = vipq.get("capacity") or {}
+        chips.append(f'<span class="papow-chip gold">👑 VIP {cap.get("vip", "—")} · '
+                     f'עומק {cap.get("deep", "—")}</span>')
+    if chips:
+        st.markdown('<div class="papow-ribbon">' + "".join(chips) + "</div>",
+                    unsafe_allow_html=True)
 
 
 # ---------- auth ----------
@@ -36,7 +104,10 @@ APP_PASSWORD = "your-password-here"'''
 def _gate() -> bool:
     if st.session_state.get("auth_ok"):
         return True
-    st.title("PapoW Board")
+    st.markdown(_CSS, unsafe_allow_html=True)
+    st.markdown('<div class="papow-word">PAP<span class="hit">O</span>W</div>'
+                '<div class="papow-tag">AIM · TRACK · PAPOW.</div>',
+                unsafe_allow_html=True)
     app_pw = _secret("APP_PASSWORD")
     if app_pw is None or _secret("DATABASE_URL") is None:
         st.error("Secrets are missing or not valid TOML. In Streamlit Cloud: **Manage app → "
@@ -73,6 +144,18 @@ def _latest(table: str) -> dict[str, Any] | None:
         row = c.execute(text(
             f'select payload_json from "{table}" order by date desc limit 1')).fetchone()
     return json.loads(row[0]) if row else None
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _latest_note(kind: str) -> dict[str, Any] | None:
+    """Newest research note of a kind (e.g. the nightly vip_board queue snapshot)."""
+    try:
+        with _engine().connect() as c:
+            row = c.execute(text('select content from research_notes where kind = :k '
+                                 'order by date desc limit 1'), {"k": kind}).fetchone()
+        return json.loads(row[0]) if row else None
+    except Exception:
+        return None
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -139,6 +222,12 @@ def _slots_tab() -> None:
             if state == "filled":
                 st.metric(f"{_ICON['filled']} Slot {i+1}", s.get("ticker"),
                           f"day {s.get('days_held')}")
+                st.markdown(
+                    f'<div class="papow-card"><div class="sub">כניסה '
+                    f'{s.get("entry_price")} ({s.get("entry_date")}) · סטופ '
+                    f'<span style="color:#FF6D7C">{s.get("sl_pct")}%</span> · יציאה: '
+                    f'{s.get("exit_style")} · נותרו {s.get("days_left")} ימים'
+                    f'</div></div>', unsafe_allow_html=True)
             elif state == "research":
                 st.metric(f"{_ICON['research']} Slot {i+1}", "research",
                           f"{s.get('days_left')}d left")
@@ -207,6 +296,68 @@ def _slots_tab() -> None:
     if dfd:
         st.warning("potential buys NOT taken (desk not calibrated): "
                    + ", ".join(f"{c['ticker']} ({c['list']})" for c in dfd))
+
+
+_STAGE_HE = {"VIP_MATURING": "מבשילה", "VIP_READY_FOR_DEEP_ANALYSIS": "מוכנה לעומק",
+             "DECISION_READY": "בנקודת-החלטה", "SHADOW_BUY": "BUY-צל 💥",
+             "CONTINUE_DEEP_ANALYSIS": "ממתינה לטריגר", "CONTINUE_WATCH": "במעקב",
+             "DROPPED_FROM_DEEP_ANALYSIS": "ירדה מעומק", "DROPPED_FROM_VIP": "יצאה"}
+
+
+def _vip_tab() -> None:
+    q = _latest_note("vip_board")
+    if not q:
+        st.info("אין עדיין תצלום-VIP — הריצה הלילית תייצר אותו")
+        return
+    cap = q.get("capacity") or {}
+    c1, c2, c3 = st.columns(3)
+    c1.metric("👑 קיבולת VIP", cap.get("vip", "—"))
+    c2.metric("🔬 בניתוח-עומק", cap.get("deep", "—"))
+    c3.metric("💥 החלטות הלילה", len(q.get("decisions") or []))
+    members = q.get("members") or []
+    deep = [m for m in members if str(m.get("status", "")).startswith(
+        ("DEEP", "DECISION", "CONTINUE_DEEP"))]
+    rest = [m for m in members if m not in deep]
+    st.markdown("#### תור-העומק — שני מפתחות, מנעול אחד")
+    if not deep:
+        st.caption("אין שמות בעומק כרגע — ההבשלה עובדת.")
+    for m in deep:
+        weakening = "weakening" in (m.get("review_flags") or [])
+        bl = m.get("bottom_line") or {}
+        qual = bl.get("good_swing_entry_now")
+        k1 = ('<span class="papow-key off">🔑 מטרי</span>' if weakening
+              else '<span class="papow-key on">🔑 מטרי</span>')
+        k2 = ('<span class="papow-key on">🔑 איכותני</span>' if qual else
+              '<span class="papow-key off">🔑 איכותני</span>' if qual is False else
+              '<span class="papow-key">🔑 איכותני · צובר</span>')
+        gate = f" · חסר: {m.get('missing_gate')}" if m.get("missing_gate") else " · מלאה"
+        stage = _STAGE_HE.get(str(m.get("status")), m.get("status"))
+        read = f' · {str(bl.get("read_he", ""))[:90]}' if bl.get("read_he") else ""
+        st.markdown(
+            f'<div class="papow-card"><span class="tkr">{m.get("ticker")}</span> '
+            f'{k1}{k2} <span class="papow-stage">{stage}</span>'
+            f'<div class="sub">בשלות {m.get("maturity")}{gate} · יום-עומק '
+            f'{m.get("days_analyzed")} → תחנה {m.get("next_station")} · מקור: '
+            f'{m.get("source")}{read}</div></div>', unsafe_allow_html=True)
+    for d in q.get("decisions") or []:
+        mv, qv = d.get("metric_vector") or {}, d.get("qual_vector") or {}
+        st.success(f"💥 {d.get('ticker')}: **{d.get('decision')}** · מטרי "
+                   f"{'✅' if mv.get('pass') else '❌'} · איכותני "
+                   f"{'✅' if qv.get('pass') else '❌'} — {d.get('explanation')}")
+    if rest:
+        st.markdown("#### שאר הרשימה")
+        st.dataframe(pd.DataFrame([{
+            "ticker": m.get("ticker"),
+            "שלב": _STAGE_HE.get(str(m.get("status")), m.get("status")),
+            "בשלות": m.get("maturity"), "חסר": m.get("missing_gate"),
+            "גיל-VIP": m.get("vip_age_days"), "מקור": m.get("source")}
+            for m in rest]), use_container_width=True, hide_index=True)
+    ev = q.get("events_today") or []
+    if ev:
+        with st.expander(f"🧾 reason codes של הלילה ({len(ev)})"):
+            for e in ev:
+                st.caption(f"{e.get('ticker')} · {e.get('reason_code')} — "
+                           f"{e.get('detail')}")
 
 
 def _desk_tab() -> None:
@@ -405,22 +556,23 @@ def _ozbeki_tab() -> None:
 
 def main() -> None:
     _gate()
-    st.title("PapoW Board — read-only viewer")
-    st.caption("🧪 DEMO / PAPER research dashboard. Renders pre-computed snapshots only; contains "
-               "no strategy logic; never places orders; not investment advice.")
-    tabs = st.tabs(["🎰 Slots", "🧭 Deal Desk", "📋 Watchlists", "🌍 Leadership",
+    _hero("read-only cockpit · demo/paper · לא ייעוץ, לא פקודות")
+    _ribbon()
+    tabs = st.tabs(["🎰 Slots", "👑 VIP", "🧭 Deal Desk", "📋 Watchlists", "🌍 Leadership",
                     "🛠 Improvement", "📖 Ozbeki"])
     with tabs[0]:
         _slots_tab()
     with tabs[1]:
-        _desk_tab()
+        _vip_tab()
     with tabs[2]:
-        _watchlists_tab()
+        _desk_tab()
     with tabs[3]:
-        _leadership_tab()
+        _watchlists_tab()
     with tabs[4]:
-        _improvement_tab()
+        _leadership_tab()
     with tabs[5]:
+        _improvement_tab()
+    with tabs[6]:
         _ozbeki_tab()
 
 
