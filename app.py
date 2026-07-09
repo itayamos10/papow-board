@@ -323,16 +323,22 @@ def _vip_tab() -> None:
         st.caption("אין שמות בעומק כרגע — ההבשלה עובדת.")
     for m in deep:
         weakening = "weakening" in (m.get("review_flags") or [])
-        bl = m.get("bottom_line") or {}
-        qual = bl.get("good_swing_entry_now")
-        k1 = ('<span class="papow-key off">🔑 מטרי</span>' if weakening
-              else '<span class="papow-key on">🔑 מטרי</span>')
-        k2 = ('<span class="papow-key on">🔑 איכותני</span>' if qual else
-              '<span class="papow-key off">🔑 איכותני</span>' if qual is False else
-              '<span class="papow-key">🔑 איכותני · צובר</span>')
+        q = m.get("qual") or {}
+        rec, buyable = str(q.get("rec") or ""), q.get("buyable")
+        conf = q.get("confidence")
+        k1 = ('<span class="papow-key off">🔑 מטרי · נחלש</span>' if weakening
+              else '<span class="papow-key on">🔑 מטרי · עובר</span>')
+        if buyable is True or rec == "BUY":
+            k2 = f'<span class="papow-key on">🔑 איכותני · BUY {conf or ""}</span>'
+        elif rec in ("WAIT", "DROP") or buyable is False:
+            k2 = f'<span class="papow-key off">🔑 איכותני · {rec or "לא עכשיו"}</span>'
+        else:
+            k2 = '<span class="papow-key">🔑 איכותני · צובר</span>'
+        eng = q.get("engine")
         gate = f" · חסר: {m.get('missing_gate')}" if m.get("missing_gate") else " · מלאה"
         stage = _STAGE_HE.get(str(m.get("status")), m.get("status"))
-        read = f' · {str(bl.get("read_he", ""))[:90]}' if bl.get("read_he") else ""
+        read = (f' · {rec[:110]}' if rec and rec not in ("BUY", "WAIT", "DROP") else "")
+        read += f' · מנוע: {eng}' if eng else ""
         st.markdown(
             f'<div class="papow-card"><span class="tkr">{m.get("ticker")}</span> '
             f'{k1}{k2} <span class="papow-stage">{stage}</span>'
