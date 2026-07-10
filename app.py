@@ -416,8 +416,9 @@ def _vip_tab() -> None:
         stage = _STAGE_HE.get(str(m.get("status")), m.get("status"))
         read = (f' · {rec[:110]}' if rec and rec not in ("BUY", "WAIT", "DROP") else "")
         read += f' · מנוע: {eng}' if eng else ""
+        mag = ' <span class="papow-chip gold">🧲 מגנט-כסף</span>' if m.get("magnet")             else ""
         st.markdown(
-            f'<div class="papow-card"><span class="tkr">{m.get("ticker")}</span> '
+            f'<div class="papow-card"><span class="tkr">{m.get("ticker")}</span>{mag} '
             f'{k1}{k2} <span class="papow-stage">{stage}</span>'
             f'<div class="sub">בשלות {m.get("maturity")}{gate} · יום-עומק '
             f'{m.get("days_analyzed")} → תחנה {m.get("next_station")} · מקור: '
