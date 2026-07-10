@@ -207,6 +207,83 @@ def _accrual() -> None:
             st.error(f"🔴 accrual looks stale — newest snapshot {newest} ({age}d old)")
 
 
+_RECOVERY = {
+    "engine": "1) הרץ ידנית run_forward_daily.cmd · 2) backfill: forward_leadership.py <תאריך>",
+    "db": "בדוק Supabase status · הריצות עושות retry×3; מייל-הערב יוצא degraded ממקורות מקומיים",
+    "board": "רענן (cache 10ד') · ודא vip_board note קיים (queue_snapshot backfill)",
+    "reports": "בדוק daily_run.log + LastTaskResult במתזמן · הקוד חייב להיות ממוזג ל-main",
+}
+
+
+def _operator_tab() -> None:
+    from datetime import date, timedelta
+    today = date.today().isoformat()
+    prev = today
+    for _ in range(4):                          # last expected NY session (weekend-aware)
+        d = date.fromisoformat(prev) - timedelta(days=1)
+        prev = d.isoformat()
+        if d.weekday() < 5:
+            break
+    ops = _latest_note("ops_health") or {}
+    lead = _latest("leadership_snapshots") or {}
+    acct = _latest("account_snapshots") or {}
+    vipq = _latest_note("vip_board") or {}
+    checks: list[tuple[str, str, str, str]] = []   # (name, state, detail, recovery_key)
+
+    def add(name, ok, warn, detail, rk):
+        checks.append((name, "PASS" if ok else ("WARN" if warn else "FAIL"), detail, rk))
+
+    eng_date = str(lead.get("date") or "—")
+    add("מנוע לילי (23:15)", eng_date >= prev, False,
+        f"מפה אחרונה: {eng_date} (צפוי ≥ {prev})", "engine")
+    av = str(ops.get("audit_verdict") or "—")
+    add("אודיט-אמת (A8+A8X)", av.startswith("PASS"), av.startswith("CONDITIONAL"),
+        av + (f" · {ops.get('audit_blockers')}" if ops.get("audit_blockers") else ""),
+        "reports")
+    add("VIP queue", bool(vipq.get("members")), False,
+        f"{len(vipq.get('members') or [])} חברים · {vipq.get('capacity')}", "board")
+    acct_date = str(acct.get("date") or "—")
+    add("חשבון/סלוטים", acct_date >= prev, False, f"snapshot: {acct_date}", "engine")
+    wh = ops.get("watcher_health") or []
+    fails = [i for i in wh if i.get("level") == "FAIL"]
+    add("בריאות-Watcher", not fails, bool(wh and not fails),
+        "; ".join(str(i.get("what")) for i in wh[:2]) or "נקי", "db")
+
+    n_fail = sum(1 for c in checks if c[1] == "FAIL")
+    n_warn = sum(1 for c in checks if c[1] == "WARN")
+    if n_fail:
+        st.markdown('<div class="papow-card" style="border-color:#FF4D5E">'
+                    f'<span class="tkr" style="color:#FF6D7C">🔴 NO-GO — {n_fail} רכיבים '
+                    'כשלו</span><div class="sub">פעל לפי סדר-העדיפויות: מנוע → DB → בורד '
+                    '→ דוחות → legacy</div></div>', unsafe_allow_html=True)
+    elif n_warn:
+        st.markdown('<div class="papow-card" style="border-color:#FFC24B">'
+                    f'<span class="tkr" style="color:#FFC24B">🟡 GO עם הסתייגות — {n_warn} '
+                    'אזהרות</span></div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="papow-card" style="border-color:#C8FF37">'
+                    '<span class="tkr" style="color:#C8FF37">🟢 GO — המערכת Operational'
+                    '</span><div class="sub">כל הרכיבים עברו את בדיקת-הבוקר</div></div>',
+                    unsafe_allow_html=True)
+    for name, state, detail, rk in checks:
+        icon = {"PASS": "✅", "WARN": "🟡", "FAIL": "🔴"}[state]
+        rec = f'<div class="sub">🔧 שחזור: {_RECOVERY.get(rk)}</div>' if state == "FAIL"             else ""
+        st.markdown(f'<div class="papow-card"><span class="tkr">{icon} {name}</span>'
+                    f'<div class="sub">{detail}</div>{rec}</div>', unsafe_allow_html=True)
+    ccs = ops.get("pending_ccs") or []
+    if ccs:
+        st.warning(f"🎯 נדרשת פעולה שלך: {len(ccs)} החלטות ממתינות — {', '.join(ccs)} "
+                   "(טאב Improvement)")
+    ms = ops.get("milestones") or []
+    nxt = sorted((mm for mm in ms if mm.get("eta_days") is not None),
+                 key=lambda x: x["eta_days"])[:2]
+    for mm in nxt:
+        st.caption(f"⏭️ אבן-הדרך הקרובה: {mm.get('id')} — n={mm.get('n')}/"
+                   f"{mm.get('next_gate')} (~{mm.get('eta_days')} ימים)")
+    if ops.get("b0a"):
+        st.caption(f"🏦 {ops.get('b0a')}")
+
+
 def _slots_tab() -> None:
     _accrual()
     acct = _latest("account_snapshots") or {}
@@ -594,21 +671,23 @@ def main() -> None:
     _gate()
     _hero("read-only cockpit · demo/paper · לא ייעוץ, לא פקודות")
     _ribbon()
-    tabs = st.tabs(["🎰 Slots", "👑 VIP", "🧭 Deal Desk", "📋 Watchlists", "🌍 Leadership",
-                    "🛠 Improvement", "📖 Ozbeki"])
+    tabs = st.tabs(["🚦 Operator", "🎰 Slots", "👑 VIP", "🧭 Deal Desk", "📋 Watchlists",
+                    "🌍 Leadership", "🛠 Improvement", "📖 Ozbeki"])
     with tabs[0]:
-        _slots_tab()
+        _operator_tab()
     with tabs[1]:
-        _vip_tab()
+        _slots_tab()
     with tabs[2]:
-        _desk_tab()
+        _vip_tab()
     with tabs[3]:
-        _watchlists_tab()
+        _desk_tab()
     with tabs[4]:
-        _leadership_tab()
+        _watchlists_tab()
     with tabs[5]:
-        _improvement_tab()
+        _leadership_tab()
     with tabs[6]:
+        _improvement_tab()
+    with tabs[7]:
         _ozbeki_tab()
 
 
