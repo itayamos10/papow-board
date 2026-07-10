@@ -50,6 +50,13 @@ p, li, span, label, .stMarkdown { color:#C9D2E3; }
   border-radius:14px; padding:12px 14px; }
 [data-testid="stMetricValue"] { color:#F2F5FA !important; }
 button[data-baseweb="tab"] { font-weight:600; }
+/* proper RTL: Hebrew text reads right-to-left, mixed EN/HE stops scrambling */
+.stMarkdown, .stCaption, [data-testid="stCaptionContainer"],
+[data-testid="stExpander"] summary, .stAlert, [data-testid="stMetricLabel"] {
+  direction:rtl; text-align:right; unicode-bidi:plaintext; }
+.papow-card, .papow-ribbon { direction:rtl; text-align:right; }
+.papow-card .sub, .papow-card .tkr { unicode-bidi:plaintext; }
+[data-testid="stDataFrame"] { direction:ltr; }  /* tables stay LTR — numbers align */
 </style>
 """
 
@@ -381,6 +388,36 @@ _STAGE_HE = {"VIP_MATURING": "מבשילה", "VIP_READY_FOR_DEEP_ANALYSIS": "מ�
              "DROPPED_FROM_DEEP_ANALYSIS": "ירדה מעומק", "DROPPED_FROM_VIP": "יצאה"}
 
 
+def _render_deep_notes(ticker: str, n: int = 2) -> None:
+    """The full daily deep-analysis records of one name, straight from the queue card."""
+    try:
+        with _engine().connect() as c:
+            rows = c.execute(text(
+                "select date, title, content from research_notes where kind = 'vip' "
+                "and title like :t order by date desc limit :n"),
+                {"t": f"%{ticker}%", "n": n}).fetchall()
+    except Exception:
+        rows = []
+    if not rows:
+        st.caption("אין עדיין ניתוח שמור לשם הזה (נשמר בכל לילה-עומק).")
+    for _dt, title, content in rows:
+        st.markdown(f"**{title}**")
+        try:
+            day = json.loads(content)
+            parsed = day.get("parsed") or {}
+            st.caption(f"מנוע: {day.get('analysis_engine')} · פרומפט: "
+                       f"{day.get('prompt_version')} · תקף: {day.get('valid')}")
+            for k, v in parsed.items():
+                if isinstance(v, list):
+                    for item in v:
+                        st.caption(f"• {item}")
+                elif v not in (None, ""):
+                    st.markdown(f"**{k}:** {v}")
+        except Exception:
+            st.text(str(content)[:2000])
+        st.divider()
+
+
 def _vip_tab() -> None:
     q = _latest_note("vip_board")
     if not q:
@@ -423,6 +460,8 @@ def _vip_tab() -> None:
             f'<div class="sub">בשלות {m.get("maturity")}{gate} · יום-עומק '
             f'{m.get("days_analyzed")} → תחנה {m.get("next_station")} · מקור: '
             f'{m.get("source")}{read}</div></div>', unsafe_allow_html=True)
+        with st.expander(f"🔬 ניתוח-העומק המלא של {m.get('ticker')}"):
+            _render_deep_notes(str(m.get("ticker")))
     for d in q.get("decisions") or []:
         mv, qv = d.get("metric_vector") or {}, d.get("qual_vector") or {}
         st.success(f"💥 {d.get('ticker')}: **{d.get('decision')}** · מטרי "
@@ -436,36 +475,6 @@ def _vip_tab() -> None:
             "בשלות": m.get("maturity"), "חסר": m.get("missing_gate"),
             "גיל-VIP": m.get("vip_age_days"), "מקור": m.get("source")}
             for m in rest]), use_container_width=True, hide_index=True)
-    st.markdown("#### 🔬 ניתוחי-העומק המלאים")
-    deep_tickers = [m.get("ticker") for m in deep] or ["—"]
-    pick = st.selectbox("בחר שם", deep_tickers, key="vip_deep_pick")
-    if pick and pick != "—":
-        try:
-            with _engine().connect() as c:
-                rows = c.execute(text(
-                    "select date, title, content from research_notes where kind = 'vip' "
-                    "and title like :t order by date desc limit 3"),
-                    {"t": f"%{pick}%"}).fetchall()
-        except Exception:
-            rows = []
-        if not rows:
-            st.caption("אין עדיין ניתוח שמור לשם הזה (נשמר בכל לילה-עומק).")
-        for dt, title, content in rows:
-            with st.expander(f"{title}"):
-                try:
-                    day = json.loads(content)
-                    parsed = day.get("parsed") or {}
-                    st.caption(f"מנוע: {day.get('analysis_engine')} · גרסת-פרומפט: "
-                               f"{day.get('prompt_version')} · תקף: {day.get('valid')}")
-                    for k, v in parsed.items():
-                        if isinstance(v, list):
-                            st.markdown("**" + k + ":**")
-                            for item in v:
-                                st.caption(f"• {item}")
-                        elif v not in (None, ""):
-                            st.markdown(f"**{k}:** {v}")
-                except Exception:
-                    st.text(str(content)[:2000])
     ev = q.get("events_today") or []
     if ev:
         with st.expander(f"🧾 reason codes של הלילה ({len(ev)})"):
@@ -514,6 +523,19 @@ _PLAYERS_HE = {"institutions": "מוסדיים", "swing_traders": "סווינג"
 
 def _story_cards(tape) -> None:
     st.markdown("#### 🎬 סיפורי-הנכסים")
+    assets = [a for a in tape.get("assets", []) if a.get("status") == "analyzed"]
+    if assets:
+        ups = [a for a in assets
+               if ((a.get("facts") or {}).get("change_pct") or 0) > 0]
+        top = max(assets, key=lambda a: abs((a.get("facts") or {}).get("change_pct") or 0))
+        backed = sum(1 for a in assets if a.get("alignment") == "confirmed")
+        st.markdown(
+            f'<div class="papow-card"><b>סקירת-מנהלים:</b> {len(ups)}/{len(assets)} '
+            f'נכסי-הפוקוס עלו · {backed} מהלכים מגובי-חדשות · הבולט: '
+            f'<b>{top.get("ticker")}</b> '
+            f'{(top.get("facts") or {}).get("change_pct"):+.2f}% — '
+            f'{str(top.get("narrative") or "").split(".")[0][:110]}.</div>',
+            unsafe_allow_html=True)
     for a in tape.get("assets", []):
         if a.get("status") != "analyzed":
             continue
