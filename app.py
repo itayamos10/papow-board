@@ -358,6 +358,36 @@ def _vip_tab() -> None:
             "בשלות": m.get("maturity"), "חסר": m.get("missing_gate"),
             "גיל-VIP": m.get("vip_age_days"), "מקור": m.get("source")}
             for m in rest]), use_container_width=True, hide_index=True)
+    st.markdown("#### 🔬 ניתוחי-העומק המלאים")
+    deep_tickers = [m.get("ticker") for m in deep] or ["—"]
+    pick = st.selectbox("בחר שם", deep_tickers, key="vip_deep_pick")
+    if pick and pick != "—":
+        try:
+            with _engine().connect() as c:
+                rows = c.execute(text(
+                    "select date, title, content from research_notes where kind = 'vip' "
+                    "and title like :t order by date desc limit 3"),
+                    {"t": f"%{pick}%"}).fetchall()
+        except Exception:
+            rows = []
+        if not rows:
+            st.caption("אין עדיין ניתוח שמור לשם הזה (נשמר בכל לילה-עומק).")
+        for dt, title, content in rows:
+            with st.expander(f"{title}"):
+                try:
+                    day = json.loads(content)
+                    parsed = day.get("parsed") or {}
+                    st.caption(f"מנוע: {day.get('analysis_engine')} · גרסת-פרומפט: "
+                               f"{day.get('prompt_version')} · תקף: {day.get('valid')}")
+                    for k, v in parsed.items():
+                        if isinstance(v, list):
+                            st.markdown("**" + k + ":**")
+                            for item in v:
+                                st.caption(f"• {item}")
+                        elif v not in (None, ""):
+                            st.markdown(f"**{k}:** {v}")
+                except Exception:
+                    st.text(str(content)[:2000])
     ev = q.get("events_today") or []
     if ev:
         with st.expander(f"🧾 reason codes של הלילה ({len(ev)})"):
