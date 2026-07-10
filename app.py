@@ -502,6 +502,40 @@ def _watchlists_tab() -> None:
         st.caption(f"⚖️ {wl.get('measurement_hook')}")
 
 
+_ALIGN_HE = {"confirmed": ("מגובה-חדשות", "volt"),
+             "contradicted": ("בניגוד לחדשות", "coral"),
+             "no_news_move": ("מהלך בלי סיפור", "cyan"), "quiet": ("יום שקט", ""),
+             "no_relevant_news": ("בלי חדשות רלוונטיות", "cyan")}
+_PLAYERS_HE = {"institutions": "מוסדיים", "swing_traders": "סווינג",
+               "day_traders": "יומיים", "speculators": "ספקולנטים",
+               "passive_flows": "זרימה פסיבית", "unclear": "לא ברור"}
+
+
+def _story_cards(tape) -> None:
+    st.markdown("#### 🎬 סיפורי-הנכסים")
+    for a in tape.get("assets", []):
+        if a.get("status") != "analyzed":
+            continue
+        chg = (a.get("facts") or {}).get("change_pct") or 0.0
+        al, cls = _ALIGN_HE.get(str(a.get("alignment")), (a.get("alignment"), ""))
+        col = "#C8FF37" if chg > 0 else "#FF6D7C"
+        hook = str(a.get("narrative") or "").split(".")[0][:130]
+        st.markdown(
+            f'<div class="papow-card"><span class="tkr">{a["ticker"]}</span> '
+            f'<b style="color:{col}">{chg:+.2f}%</b> '
+            f'<span class="papow-chip {cls}">{al}</span>'
+            f'<div style="margin-top:6px;color:#E6ECF7">{hook}.</div></div>',
+            unsafe_allow_html=True)
+        with st.expander("הסיפור המלא · לוגיקת הסוחרים · שחקנים"):
+            st.markdown(a.get("narrative") or "")
+            st.markdown(f"**לוגיקת הסוחרים:** {a.get('trader_logic')}")
+            pl = " · ".join(_PLAYERS_HE.get(str(x.get("type")), str(x.get("type")))
+                            for x in a.get("players", []))
+            conf = a.get("confidence")
+            st.caption(f"שחקנים: {pl}" + (f" · דרגת-קריאה: {conf}"
+                                          if conf and conf != "None" else ""))
+
+
 def _leadership_tab() -> None:
     m = _latest("leadership_snapshots") or {}
     tape = m.get("tape_story") or {}
@@ -515,15 +549,7 @@ def _leadership_tab() -> None:
             st.caption(f"מאזן: {led.get('confirmed', 0)} מגובי-חדשות · "
                        f"{led.get('contradicted', 0)} בניגוד · "
                        f"{led.get('no_news_move', 0)} בלי סיפור — היפותזה פתוחה, הקשר בלבד")
-        with st.expander("🔬 ניתוח פר-נכס (נרות, שחקנים, לוגיקת סוחרים)"):
-            for a in tape.get("assets", []):
-                if a.get("status") != "analyzed":
-                    continue
-                pl = ", ".join(p.get("type", "?") for p in a.get("players", []))
-                st.markdown(f"**{a['ticker']}** ({a['facts']['change_pct']:+.2f}%, "
-                            f"{a.get('alignment')}) — {a.get('narrative')}\n\n"
-                            f"_לוגיקת הסוחרים:_ {a.get('trader_logic')}  \n"
-                            f"_שחקנים:_ {pl} · ביטחון: {a.get('confidence')}")
+        _story_cards(tape)
     story = m.get("market_story") or {}
     if story.get("narrative"):
         st.info(story["narrative"])
