@@ -306,9 +306,14 @@ def _slots_tab() -> None:
             if state == "filled":
                 st.metric(f"{_ICON['filled']} Slot {i+1}", s.get("ticker"),
                           f"day {s.get('days_held')}")
+                pnl = s.get("pnl_pct")
+                pnl_c = "#C8FF37" if (pnl or 0) >= 0 else "#FF6D7C"
+                pnl_html = (f' · P&L <b style="color:{pnl_c}">{pnl:+.2f}%</b> '
+                            f'(₪{s.get("pnl_ils", 0):+,.0f})' if pnl is not None else "")
                 st.markdown(
-                    f'<div class="papow-card"><div class="sub">כניסה '
-                    f'{s.get("entry_price")} ({s.get("entry_date")}) · סטופ '
+                    f'<div class="papow-card"><div class="sub">קנייה ₪{s.get("cost", 0):,.0f}'
+                    f' @ {s.get("entry_price")} ({s.get("entry_date")}) · אחרון '
+                    f'{s.get("last_price", "—")}{pnl_html}<br>סטופ '
                     f'<span style="color:#FF6D7C">{s.get("sl_pct")}%</span> · יציאה: '
                     f'{s.get("exit_style")} · נותרו {s.get("days_left")} ימים'
                     f'</div></div>', unsafe_allow_html=True)
