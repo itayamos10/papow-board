@@ -473,6 +473,8 @@ def _vip_tab() -> None:
         read = (f' · {rec[:110]}' if rec and rec not in ("BUY", "WAIT", "DROP") else "")
         read += f' · מנוע: {eng}' if eng else ""
         mag = ' <span class="papow-chip gold">🧲 מגנט-כסף</span>' if m.get("magnet")             else ""
+        if m.get("thesis"):
+            mag += f' <span class="papow-chip">🧪 תזה: {m.get("thesis")}</span>'
         _BEHAV_HE = {"CROWDED_SHORT": "🩳 שורט צפוף", "EXTREME_SHORT_INTEREST": "🧨 שורט קיצוני",
                      "SQUEEZE_PRESSURE_BUILDING": "🔥 לחץ-סקוויז", "ACTIVE_SQUEEZE": "🚀 סקוויז פעיל",
                      "SQUEEZE_EXHAUSTION": "🎇 סקוויז מתפוגג",
@@ -508,6 +510,36 @@ def _vip_tab() -> None:
             for e in ev:
                 st.caption(f"{e.get('ticker')} · {e.get('reason_code')} — "
                            f"{e.get('detail')}")
+    _thesis_card()
+
+
+_TH_HE = {"DORMANT": "🛌 רדומה", "WARMING": "🌡️ מתחממת", "AWAKE": "🚨 ערה"}
+
+
+def _thesis_card() -> None:
+    """The research-thesis pipeline — the SECOND VIP entry lane, its own gates."""
+    tw = _latest_note("thesis_watch")
+    if not tw:
+        return
+    st.markdown("#### 🧪 תזות-מחקר — פייפליין-כניסה שני (שערים משלו)")
+    for s in tw.get("scans") or []:
+        core = s.get("core") or {}
+        ew = core.get("ew_20d")
+        bits = [_TH_HE.get(str(s.get("status")), s.get("status"))]
+        if ew is not None:
+            bits.append(f"EW20 {ew:+.1f}%")
+        if core.get("rs_share") is not None:
+            bits.append(f"RS>0: {int(core['rs_share'] * 100)}%")
+        if s.get("locomotives"):
+            bits.append(f"קטר→VIP: {', '.join(s['locomotives'])}")
+        if s.get("mode") == "risk":
+            bits.append("עדשת-סיכון")
+        st.markdown(f"**{s.get('title_he')}** — " + " · ".join(str(b) for b in bits))
+        if s.get("reasons"):
+            st.caption(" · ".join(str(r) for r in s["reasons"][:2]))
+    st.caption("תזה ערה מושיבה רק את הקטר שלה (עד 2 כיסאות-תזה בכל ה-VIP); שאר הסל "
+               "ב-WATCHLISTS. שערי-הכניסה של תזה הם תנאי-ההתעוררות שלה — לא חמשת שערי-"
+               "הצינור הרגיל.")
 
 
 def _desk_tab() -> None:
