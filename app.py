@@ -7,16 +7,20 @@ dashboard; nothing here is investment advice and nothing places orders.
 
 from __future__ import annotations
 
+import base64
 import json
 import uuid
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 from sqlalchemy import create_engine, text
 
-st.set_page_config(page_title="PAPOW — the board", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="PapoW — the board",
+                   page_icon=str(Path(__file__).parent / "assets/icon.svg"),
+                   layout="wide")
 
 # ---------- PAPOW brand (docs/brand/BRAND.md in the core repo) ----------
 _CSS = """
@@ -61,12 +65,24 @@ button[data-baseweb="tab"] { font-weight:600; }
 """
 
 
+def _logo_html(height: int = 40) -> str:
+    """L1: the real vector lockup (outlined text — no font dependency), inlined base64."""
+    try:
+        raw = (Path(__file__).parent / "assets/lockup-compact.svg").read_bytes()
+        b64 = base64.b64encode(raw).decode()
+        return (f'<img src="data:image/svg+xml;base64,{b64}" alt="PapoW" '
+                f'style="height:{height}px;vertical-align:middle">')
+    except OSError:                                        # asset missing -> text fallback
+        return '<span class="papow-word">Papo<span class="hit">W</span></span>'
+
+
 def _hero(sub: str = "") -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
-    st.markdown('<div class="papow-word">PAP<span class="hit">O</span>W</div>'
-                '<div class="papow-tag">AIM · TRACK · <b>PAPOW.</b> &nbsp;·&nbsp; '
-                'רואים · עוקבים · פוגעים' + (f' &nbsp;·&nbsp; {sub}' if sub else '')
-                + '</div>', unsafe_allow_html=True)
+    st.markdown('<div style="display:flex;align-items:center;gap:16px" dir="ltr">'
+                + _logo_html(44)
+                + '<div class="papow-tag">watch. <span class="hit">aim.</span> PapoW'
+                + (f' &nbsp;·&nbsp; {sub}' if sub else '') + '</div></div>',
+                unsafe_allow_html=True)
 
 
 def _ribbon() -> None:
@@ -112,9 +128,9 @@ def _gate() -> bool:
     if st.session_state.get("auth_ok"):
         return True
     st.markdown(_CSS, unsafe_allow_html=True)
-    st.markdown('<div class="papow-word">PAP<span class="hit">O</span>W</div>'
-                '<div class="papow-tag">AIM · TRACK · PAPOW.</div>',
-                unsafe_allow_html=True)
+    st.markdown('<div dir="ltr">' + _logo_html(40)
+                + '<div class="papow-tag">watch. <span class="hit">aim.</span> PapoW'
+                '</div></div>', unsafe_allow_html=True)
     app_pw = _secret("APP_PASSWORD")
     if app_pw is None or _secret("DATABASE_URL") is None:
         st.error("Secrets are missing or not valid TOML. In Streamlit Cloud: **Manage app → "
