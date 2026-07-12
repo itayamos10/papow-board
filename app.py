@@ -393,6 +393,20 @@ _STAGE_HE = {"VIP_MATURING": "מבשילה", "VIP_READY_FOR_DEEP_ANALYSIS": "מ�
              "DROPPED_FROM_DEEP_ANALYSIS": "ירדה מעומק", "DROPPED_FROM_VIP": "יצאה"}
 
 
+def _render_memory(ticker: str) -> None:
+    """🧠 the organizational brain: what we KNOW about this name + similar cases."""
+    brain = _latest_note("memory_brain") or {}
+    d = (brain.get("dossiers") or {}).get(ticker)
+    if not d:
+        return
+    st.markdown(f'<div class="papow-card"><span class="tkr">🧠 {d.get("read_he")}</span>'
+                + (f'<div class="sub">🔁 {d.get("similar")}</div>'
+                   if d.get("similar") else "")
+                + "".join(f'<div class="sub">📌 לקח: {les}</div>'
+                          for les in d.get("lessons") or [])
+                + '</div>', unsafe_allow_html=True)
+
+
 def _render_deep_notes(ticker: str, n: int = 2) -> None:
     """The full daily deep-analysis records of one name, straight from the queue card."""
     try:
@@ -473,6 +487,7 @@ def _vip_tab() -> None:
             f'{m.get("days_analyzed")} → תחנה {m.get("next_station")} · מקור: '
             f'{m.get("source")}{read}</div></div>', unsafe_allow_html=True)
         with st.expander(f"🔬 ניתוח-העומק המלא של {m.get('ticker')}"):
+            _render_memory(str(m.get("ticker")))
             _render_deep_notes(str(m.get("ticker")))
     for d in q.get("decisions") or []:
         mv, qv = d.get("metric_vector") or {}, d.get("qual_vector") or {}
@@ -516,11 +531,16 @@ def _desk_tab() -> None:
 
 def _watchlists_tab() -> None:
     w = _latest("watchlist_snapshots") or {}
+    st.caption("★ חודש-מסחר = 20 ימי-מסחר ≈ חודש קלנדרי — חלון-ההחלטה של הסווינג "
+               "(מול Yahoo/TradingView: יום/שבוע זהים; 'חודש' אצלם קלנדרי — סטייה קטנה "
+               "צפויה).")
     for wl in w.get("watchlists", []):
         st.markdown(f"**[{wl.get('provenance')}·{wl.get('basis')}] {wl.get('kind')}** — "
                     f"{wl.get('purpose')}")
         if wl.get("members"):
-            st.dataframe(pd.DataFrame(wl["members"]), use_container_width=True, hide_index=True)
+            df = pd.DataFrame(wl["members"]).rename(columns={
+                "ret_20d": "חודש-מסחר % ★", "ret_1d": "יום %", "ret_5d": "שבוע %"})
+            st.dataframe(df, use_container_width=True, hide_index=True)
         st.caption(f"⚖️ {wl.get('measurement_hook')}")
 
 
@@ -590,16 +610,27 @@ def _leadership_tab() -> None:
         st.info(story["narrative"])
     secs = m.get("leading_sectors") or []
     if secs:
-        st.dataframe(pd.DataFrame([{"sector": s["sector"], "persistence":
+        st.dataframe(pd.DataFrame([{"sector": s["sector"],
+                                    "יום %": ((s.get("returns") or {}).get("1d")),
+                                    "שבוע %": ((s.get("returns") or {}).get("5d")),
+                                    "חודש-מסחר % ★": ((s.get("returns") or {}).get("20d")),
+                                    "persistence":
                                     (s.get("persistence") or {}).get("score"),
                                     "trend": s.get("trend")} for s in secs]),
                      use_container_width=True, hide_index=True)
     st.markdown("**leaders**")
     st.dataframe(pd.DataFrame([{"ticker": c["ticker"], "sector": c.get("sector"),
-                                "pocket": c.get("pocket_id"), "ret_20d": c.get("ret_20d"),
+                                "pocket": c.get("pocket_id"),
+                                "יום %": c.get("ret_1d"),
+                                "שבוע %": c.get("ret_5d"),
+                                "חודש-מסחר % ★": c.get("ret_20d"),
                                 "stage": c.get("move_stage")}
                                for c in m.get("stock_leaders", [])]),
                  use_container_width=True, hide_index=True)
+    st.caption("★ **חודש-מסחר = 20 ימי-מסחר ≈ חודש קלנדרי — חלון-ההחלטה של הסווינג שלנו** "
+               "(אופק ≤4 שבועות). מול Yahoo/TradingView: יום ושבוע (5d) זהים אחד-לאחד; "
+               "ה'חודש' שלהם קלנדרי, ולכן סטייה קטנה מול 20d צפויה ואינה שגיאה. "
+               "עמודות ריקות = מפה מלפני העדכון (מתמלא בריצת-הלילה).")
     for k, v in (m.get("caveats") or {}).items():
         st.caption(f"⚠️ {k}: {v}")
 
