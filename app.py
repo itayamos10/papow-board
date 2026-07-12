@@ -459,8 +459,15 @@ def _vip_tab() -> None:
         read = (f' · {rec[:110]}' if rec and rec not in ("BUY", "WAIT", "DROP") else "")
         read += f' · מנוע: {eng}' if eng else ""
         mag = ' <span class="papow-chip gold">🧲 מגנט-כסף</span>' if m.get("magnet")             else ""
+        _BEHAV_HE = {"CROWDED_SHORT": "🩳 שורט צפוף", "EXTREME_SHORT_INTEREST": "🧨 שורט קיצוני",
+                     "SQUEEZE_PRESSURE_BUILDING": "🔥 לחץ-סקוויז", "ACTIVE_SQUEEZE": "🚀 סקוויז פעיל",
+                     "SQUEEZE_EXHAUSTION": "🎇 סקוויז מתפוגג",
+                     "INSIDER_OPEN_MARKET_CLUSTER": "👔 קניות-פנים",
+                     "RETAIL_CHASE_INTO_STRENGTH": "🎪 רדיפת-ריטייל"}
+        beh = "".join(f' <span class="papow-chip cyan">🧬 {_BEHAV_HE.get(x, x)}</span>'
+                      for x in (m.get("behavior_states") or []))
         st.markdown(
-            f'<div class="papow-card"><span class="tkr">{m.get("ticker")}</span>{mag} '
+            f'<div class="papow-card"><span class="tkr">{m.get("ticker")}</span>{mag}{beh} '
             f'{k1}{k2} <span class="papow-stage">{stage}</span>'
             f'<div class="sub">בשלות {m.get("maturity")}{gate} · יום-עומק '
             f'{m.get("days_analyzed")} → תחנה {m.get("next_station")} · מקור: '
