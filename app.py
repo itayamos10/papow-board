@@ -210,6 +210,26 @@ def _latest_note(kind: str) -> dict[str, Any] | None:
 
 
 @st.cache_data(ttl=600, show_spinner=False)
+def _notes_of(kind: str, limit: int = 12) -> list[dict[str, Any]]:
+    """Newest N research notes of a kind, parsed, with their id/date riding along."""
+    try:
+        with _engine().connect() as c:
+            rows = c.execute(text('select id, date, content from research_notes '
+                                  'where kind = :k order by date desc limit :n'),
+                             {"k": kind, "n": limit}).fetchall()
+        out = []
+        for rid, d, content in rows:
+            payload = json.loads(content)
+            if isinstance(payload, dict):
+                payload.setdefault("_id", rid)
+                payload.setdefault("_date", str(d))
+            out.append(payload)
+        return out
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=600, show_spinner=False)
 def _counts() -> list[tuple[str, int, str]]:
     out = []
     with _engine().connect() as c:
@@ -379,36 +399,37 @@ def _slots_tab() -> None:
                           f"{s.get('days_left')}d left")
             else:
                 st.metric(f"{_ICON['ready']} Slot {i+1}", "ready", "cash")
-    pipe = board.get("pipeline") or []
-    if pipe:
-        st.markdown("**The ladder** (long-only)")
-        st.dataframe(pd.DataFrame([{
-            "state": _STATE_HE.get(r["state"], r["state"]), "ticker": r["ticker"],
-            "בשלות": r.get("maturity") or "—",
-            "טריות": {"fresh": "🟢 טרי", "aging": "🟡 מזדקן", "stale": "🔴 רקוב"}.get(
-                str(r.get("freshness")),
-                "—") + (f" (יום {r['signal_age_days']})"
-                        if r.get("signal_age_days") is not None else ""),
-            "thesis": r.get("thesis") or "—",
-            "character": r.get("char_class") or "—", "technique": r.get("technique") or "—",
-            "entry": r.get("entry_level") or "—",
-            "SL": f"{r['sl_price']} ({r['sl_pct']}%)" if r.get("sl_price") else "—",
-            "size": f"₪{r['size_hint']:,.0f}" if r.get("size_hint") and r["state"] != "watch"
-                    else "—",
-            "why": r.get("why")} for r in pipe]), use_container_width=True, hide_index=True)
-        for r in pipe:
-            if r["state"] == "watch":
+    # nightly HOLD reads per open position — the manager's real question: להחזיק? להדק?
+    held_names = [str(s.get("ticker")) for s in (board.get("slots") or [])
+                  if s.get("state") == "filled"]
+    if held_names:
+        st.markdown("#### 🩺 קריאת-ההחזקה של הלילה")
+        holds = _notes_of("trade_hold", limit=12)
+        shown = set()
+        for h in holds:
+            p = h.get("parsed") or {}
+            t = str(h.get("ticker") or "")
+            if t in shown or t not in held_names or not h.get("valid"):
                 continue
-            with st.expander(f"🔍 {r['ticker']} — full maturity detail"):
-                if r.get("gates"):
-                    st.dataframe(pd.DataFrame([{"gate": g["gate"],
-                                                "status": "🟢" if g["ok"] else "🔴",
-                                                "detail": g["why"]} for g in r["gates"]]),
-                                 use_container_width=True, hide_index=True)
-                for k, v in (r.get("entry_rules") or {}).items():
-                    st.markdown(f"- `{k}`: {v}")
-                if r.get("prior"):
-                    st.caption(f"prior (in-sample): {r['prior']}")
+            shown.add(t)
+            rec_he = {"hold": "החזק", "tighten_stop": "הדק סטופ",
+                      "take_partial": "מימוש חלקי", "exit": "צא"}.get(
+                str(p.get("manage")), str(p.get("manage") or "—"))
+            st.markdown(f'<div class="papow-card"><span class="tkr">{t}</span> '
+                        f'<b>{rec_he}</b> · תזה: {p.get("thesis_state", "—")}'
+                        f'<div class="sub">{str(p.get("manage_why") or "")[:180]} '
+                        f'<i>({h.get("_date")}; המלצה בלבד — ההחלטה שלך)</i></div></div>',
+                        unsafe_allow_html=True)
+        if not shown:
+            st.caption("אין עדיין קריאת-לילה לפוזיציות — נכתבת בריצת 23:15.")
+    closes = _notes_of("trade_close", limit=3)
+    if closes:
+        st.markdown("#### 📕 סגירות אחרונות")
+        for cnote in closes:
+            if cnote.get("read_he"):
+                st.markdown(f"- {cnote['read_he']} _({cnote.get('_date')})_")
+    st.caption("🪜 סולם-הצנרת המלא (מי מתקרב לסלוט, שערים וטריות) עבר לטאב 🚪 תור-VIP — "
+               "כאן מנהלים רק מה שחי.")
     gone = board.get("departed_since_prev") or []
     if gone:
         st.info("🚪 עזבו את הצנרת מאתמול: "
@@ -576,6 +597,40 @@ def _vip_queue_tab() -> None:
             for m in rest]), use_container_width=True, hide_index=True)
     else:
         st.caption("אין שמות בהבשלה כרגע — התור ריק וזה נתון, לא תקלה.")
+    # the slot-pipeline ladder (moved from the deal manager — it's queue business)
+    acct = _latest("account_snapshots") or {}
+    pipe = (acct.get("slot_board") or {}).get("pipeline") or []
+    if pipe:
+        st.markdown("#### 🪜 סולם-הצנרת לסלוטים")
+        st.dataframe(pd.DataFrame([{
+            "state": _STATE_HE.get(r["state"], r["state"]), "ticker": r["ticker"],
+            "בשלות": r.get("maturity") or "—",
+            "טריות": {"fresh": "🟢 טרי", "aging": "🟡 מזדקן", "stale": "🔴 רקוב"}.get(
+                str(r.get("freshness")),
+                "—") + (f" (יום {r['signal_age_days']})"
+                        if r.get("signal_age_days") is not None else ""),
+            "thesis": r.get("thesis") or "—",
+            "character": r.get("char_class") or "—",
+            "technique": r.get("technique") or "—",
+            "entry": r.get("entry_level") or "—",
+            "SL": f"{r['sl_price']} ({r['sl_pct']}%)" if r.get("sl_price") else "—",
+            "size": f"₪{r['size_hint']:,.0f}" if r.get("size_hint")
+                    and r["state"] != "watch" else "—",
+            "why": r.get("why")} for r in pipe]), use_container_width=True,
+            hide_index=True)
+        for r in pipe:
+            if r["state"] == "watch":
+                continue
+            with st.expander(f"🔍 {r['ticker']} — פירוט-שערים מלא"):
+                if r.get("gates"):
+                    st.dataframe(pd.DataFrame([{"gate": g["gate"],
+                                                "status": "🟢" if g["ok"] else "🔴",
+                                                "detail": g["why"]} for g in r["gates"]]),
+                                 use_container_width=True, hide_index=True)
+                for k, v in (r.get("entry_rules") or {}).items():
+                    st.markdown(f"- `{k}`: {v}")
+                if r.get("prior"):
+                    st.caption(f"prior (in-sample): {r['prior']}")
     _thesis_card()                      # theses ARE an entry lane — they live here
     ev = q.get("events_today") or []
     if ev:
