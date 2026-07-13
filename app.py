@@ -455,27 +455,103 @@ def _slots_tab() -> None:
                 unsafe_allow_html=True)
     with st.expander("🧭 מנוע-הקצב המלא (Deal Desk)"):
         _desk_tab()
-    # MANAGER-APPROVAL GATE (owner 13.07): no slot fills without an explicit yes here
+    # MANAGER-APPROVAL GATE (owner 13.07): no slot fills without an explicit yes here.
+    # The card carries EVERYTHING a decision needs (owner: synthesis of the whole
+    # process + both engines + bottom line) and reflects YOUR click immediately.
     pend = acct.get("pending_fills") or []
     if pend:
         st.markdown("#### 🔐 החלטות-קנייה ממתינות לאישורך")
-        st.caption("שום סלוט לא מתמלא בלי אישור; החלטה שלא נענתה 3 סשנים פוקעת. הפירוט "
-                   "המלא (רמות/שערים/אנליסט/תזמון) — במייל-האישור.")
+        st.caption("אישור = מילוי בפתיחת-המסחר הבאה (CC001 — מעובד בריצת 23:15); דחייה "
+                   "מפילה; שתיקה של 3 סשנים מפקיעה.")
+        appr: dict[str, str] = {}
+        for n in _notes_of("trade_approval", 30):          # newest first per ticker
+            t0 = str(n.get("ticker", "")).upper()
+            if t0 and t0 not in appr:
+                appr[t0] = str(n.get("decision"))
+        pipe_rows = {str(r.get("ticker")): r for r in board.get("pipeline") or []}
+        vip_m = {str(m.get("ticker")): m
+                 for m in (_latest_note("vip_board") or {}).get("members") or []}
+        nb = acct.get("not_bought_today") or []
+        cands = [r for r in board.get("pipeline") or []
+                 if r.get("state") == "candidate" and str(r.get("ticker")) not in
+                 {str(x.get("ticker")) for x in pend}]
         for p in pend:
             t = str(p.get("ticker"))
+            row = pipe_rows.get(t) or {}
+            vm = vip_m.get(t) or {}
             c1, c2, c3 = st.columns([3, 1, 1])
             c1.markdown(f"**{t}** · ₪{p.get('alloc', 0):,.0f} · הוחלט "
                         f"{p.get('decision_date')} · ממתין "
                         f"{p.get('sessions_waiting', 0)}/3 סשנים")
-            if p.get("status") == "awaiting_manager_approval":
+            my = appr.get(t)
+            if my == "approve":
+                c2.markdown("✅ **אושר על-ידך** — ימולא בפתיחה הבאה")
+            elif my == "reject":
+                c2.markdown("❌ **נדחה על-ידך** — תוסר בריצה הבאה")
+            else:
                 if c2.button("✅ אשר", key=f"tra_{t}"):
                     _approve_trade(t, "approve")
                     st.rerun()
                 if c3.button("❌ דחה", key=f"trr_{t}"):
                     _approve_trade(t, "reject")
                     st.rerun()
-            else:
-                c2.markdown("✅ מאושר — ימולא בפתיחה")
+            with st.expander(f"🔎 {t} — הסינתזה המלאה להחלטה"):
+                # 1 ── why it was chosen + the standard it sits on
+                st.markdown(f"**למה נבחרה:** {row.get('why') or 'שורת-הצנרת לא זמינה'}")
+                st.caption(f"טכניקה: {row.get('technique') or '—'} · טריות: "
+                           f"{row.get('freshness') or '—'}"
+                           + (f" (יום {row.get('signal_age_days')})"
+                              if row.get("signal_age_days") is not None else "")
+                           + f" · אופי: {row.get('char_class') or '—'}")
+                # 2 ── the deal plan: entry / stop / size / risk
+                sl_pct = row.get("sl_pct")
+                risk = (f"₪{abs(float(p.get('alloc', 0)) * float(sl_pct) / 100):,.0f}"
+                        if sl_pct else "—")
+                st.markdown(f"| כניסה | סטופ | גודל | סיכון-בסטופ | סגנון-יציאה |\n"
+                            f"|---|---|---|---|---|\n"
+                            f"| {row.get('entry_level') or 'פתיחה הבאה'} "
+                            f"| {row.get('sl_price') or '—'} ({sl_pct or '—'}%) "
+                            f"| ₪{p.get('alloc', 0):,.0f} | {risk} "
+                            f"| {row.get('technique') or '—'} |")
+                # 3 ── the metric engine: gates
+                if row.get("gates"):
+                    st.dataframe(pd.DataFrame(
+                        [{"": "🟢" if g["ok"] else "🔴", "שער": g["gate"],
+                          "נימוק": g["why"]} for g in row["gates"]]),
+                        use_container_width=True, hide_index=True)
+                # 4 ── the qualitative engine (VIP deep) — or the honest gap
+                q = vm.get("qual") or {}
+                if q.get("rec") or vm.get("bottom_line"):
+                    st.markdown(f"**האנליסט (עומק):** {q.get('rec') or '—'} · ביטחון "
+                                f"{q.get('confidence') or '—'} · מנוע {q.get('engine') or '—'}")
+                    if (vm.get("bottom_line") or {}).get("read_he"):
+                        st.caption(vm["bottom_line"]["read_he"])
+                else:
+                    st.warning("⚠️ לא עבר ניתוח-עומק VIP ואימות שני-מפתחות — הגיע "
+                               "מצינור-השערים המטרי בלבד. זה בדיוק מה שהשער הזה בודק.")
+                # 5 ── the competition: who lost the slot and why
+                if nb:
+                    st.markdown("**מי התחרה ולא נבחר:** " + " · ".join(
+                        f"{x.get('ticker')} ({str(x.get('reason'))[:40]})"
+                        for x in nb[:4]))
+                # 6 ── alternatives that may mature inside your approval window
+                if cands:
+                    st.markdown("**מבשילות שעשויות להחליף בחלון-האישור:** " + " · ".join(
+                        f"{c0.get('ticker')} ({c0.get('maturity') or '—'})"
+                        for c0 in cands[:4]))
+                # 7 ── bottom line: both engines, one sentence
+                metric_full = str(row.get("state")) == "buy_signal"
+                rec = str(q.get("rec") or "")
+                if metric_full and rec == "BUY":
+                    st.success("🟢 שורה תחתונה: שני המנועים מסכימים — מטרי מלא + אנליסט "
+                               "BUY. כשיר לאישור.")
+                elif metric_full and not q:
+                    st.info("🟡 שורה תחתונה: מטרי מלא אך ללא מנוע-עומק — האישור הוא "
+                            "שיקול-הסיכון שלך.")
+                elif rec in ("WAIT", "DROP"):
+                    st.error(f"🔴 שורה תחתונה: האנליסט אומר {rec} — שקול לדחות או להמתין.")
+                else:
+                    st.info("🟡 שורה תחתונה: תמונה חלקית — ראה שערים ואנליסט למעלה.")
     st.caption(f"as of **{board.get('date')}** · desk verdict: **{board.get('desk_verdict')}**")
     cols = st.columns(4)
     for i, s in enumerate((board.get("slots") or [])[:4]):
