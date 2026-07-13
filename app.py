@@ -869,12 +869,22 @@ def _thesis_card() -> None:
             bits.append(f"קטר→VIP: {', '.join(s['locomotives'])}")
         if s.get("mode") == "risk":
             bits.append("עדשת-סיכון")
+        qt = s.get("qual_today") or []
+        silent = s.get("days_since_news")
+        if qt:
+            bits.append(f"📰 {len(qt)} כותרות-פרופיל היום")
+        elif silent is not None:
+            bits.append(f"🔇 שקט {silent} ימ'")
         st.markdown(f"**{s.get('title_he')}** — " + " · ".join(str(b) for b in bits))
         if s.get("reasons"):
             st.caption(" · ".join(str(r) for r in s["reasons"][:2]))
+        for h in qt[:2]:
+            st.caption(f"📰 {h.get('ticker')}: \"{h.get('title')}\" "
+                       f"({', '.join(h.get('matched') or [])})")
     st.caption("תזה ערה מושיבה רק את הקטר שלה (עד 2 כיסאות-תזה בכל ה-VIP); שאר הסל "
                "ב-WATCHLISTS. שערי-הכניסה של תזה הם תנאי-ההתעוררות שלה — לא חמשת שערי-"
-               "הצינור הרגיל.")
+               "הצינור הרגיל. הפיד האיכותני: כותרות שנוגעות בפרופיל-החדשות של התזה — "
+               "ראיה לרלוונטיות, לא שער.")
 
 
 def _desk_tab() -> None:
@@ -1021,6 +1031,8 @@ def _leadership_tab() -> None:
     rg = m.get("regime_v2") or {}
     if rg.get("read_he"):
         st.info("🌊 " + str(rg["read_he"]))
+        if rg.get("qual_note_he"):
+            st.caption(str(rg["qual_note_he"]))
     # money flows + the behavioral third lens (owner 13.07: depth belongs here)
     st.markdown("#### 💸 זרימות-הכסף והעדשה-ההתנהגותית")
     flows = []
