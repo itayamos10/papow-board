@@ -209,6 +209,24 @@ def _latest_note(kind: str) -> dict[str, Any] | None:
         return None
 
 
+def _approve_trade(ticker: str, decision: str) -> None:
+    """The manager's yes/no on a pending fill — written as a research note the engine
+    reads at fill time (approve fills at next open; reject drops; silence expires)."""
+    today = date.today().isoformat()
+    nid = f"trade_approval:{ticker}:{today}"
+    payload = json.dumps({"ticker": ticker, "decision": decision, "date": today,
+                          "by": "board"}, ensure_ascii=False)
+    with _engine().begin() as c:
+        c.execute(text(
+            'insert into research_notes (id, date, kind, title, content) '
+            'values (:i, :d, :k, :t, :c) '
+            'on conflict (id) do update set content = excluded.content, '
+            'date = excluded.date'),
+            {"i": nid, "d": today, "k": "trade_approval",
+             "t": f"Trade approval — {ticker}: {decision}", "c": payload})
+    _notes_of.clear()
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def _notes_of(kind: str, limit: int = 12) -> list[dict[str, Any]]:
     """Newest N research notes of a kind, parsed, with their id/date riding along."""
@@ -375,6 +393,27 @@ def _slots_tab() -> None:
                 unsafe_allow_html=True)
     with st.expander("🧭 מנוע-הקצב המלא (Deal Desk)"):
         _desk_tab()
+    # MANAGER-APPROVAL GATE (owner 13.07): no slot fills without an explicit yes here
+    pend = acct.get("pending_fills") or []
+    if pend:
+        st.markdown("#### 🔐 החלטות-קנייה ממתינות לאישורך")
+        st.caption("שום סלוט לא מתמלא בלי אישור; החלטה שלא נענתה 3 סשנים פוקעת. הפירוט "
+                   "המלא (רמות/שערים/אנליסט/תזמון) — במייל-האישור.")
+        for p in pend:
+            t = str(p.get("ticker"))
+            c1, c2, c3 = st.columns([3, 1, 1])
+            c1.markdown(f"**{t}** · ₪{p.get('alloc', 0):,.0f} · הוחלט "
+                        f"{p.get('decision_date')} · ממתין "
+                        f"{p.get('sessions_waiting', 0)}/3 סשנים")
+            if p.get("status") == "awaiting_manager_approval":
+                if c2.button("✅ אשר", key=f"tra_{t}"):
+                    _approve_trade(t, "approve")
+                    st.rerun()
+                if c3.button("❌ דחה", key=f"trr_{t}"):
+                    _approve_trade(t, "reject")
+                    st.rerun()
+            else:
+                c2.markdown("✅ מאושר — ימולא בפתיחה")
     st.caption(f"as of **{board.get('date')}** · desk verdict: **{board.get('desk_verdict')}**")
     cols = st.columns(4)
     for i, s in enumerate((board.get("slots") or [])[:4]):
