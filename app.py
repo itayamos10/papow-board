@@ -61,6 +61,13 @@ button[data-baseweb="tab"] { font-weight:600; }
 .papow-card, .papow-ribbon { direction:rtl; text-align:right; }
 .papow-card .sub, .papow-card .tkr { unicode-bidi:plaintext; }
 [data-testid="stDataFrame"] { direction:ltr; }  /* tables stay LTR — numbers align */
+/* ---- full RTL for the Israeli user (owner 13.07): the WHOLE surface reads right-to-left */
+section.main, [data-testid="stAppViewContainer"] > section { direction:rtl; }
+[data-testid="stMarkdownContainer"] { text-align:right; }
+[data-testid="stMetric"] { direction:rtl; text-align:right; }
+.stTabs [data-baseweb="tab-list"] { direction:rtl; justify-content:flex-start; }
+[data-testid="stExpander"] summary { direction:rtl; text-align:right; }
+[data-testid="stCaptionContainer"] { text-align:right; }
 </style>
 """
 
@@ -308,12 +315,25 @@ def _operator_tab() -> None:
 
 
 def _slots_tab() -> None:
+    """מנהל-העסקאות: פוזיציות ו-P&L קודם; פסק-הדסק כרצועה (Deal Desk המלא בהרחבה —
+    הערך העסקי שלו: הוא השוער שקובע אם מותר לפרוס הון היום; owner 13.07)."""
     _accrual()
     acct = _latest("account_snapshots") or {}
     board = acct.get("slot_board") or {}
     if not board:
         st.info("no board yet — the nightly loop populates it")
         return
+    d = _latest("forward_desk_snapshots") or {}
+    r0, c0 = d.get("readiness") or {}, d.get("calibration") or {}
+    verdict = "🟢 מותר לקנות" if r0.get("verdict") == "buy_now" else "🟠 ממתינים"
+    hr = "—" if c0.get("hit_rate") is None else f"{c0['hit_rate']:.0%}"
+    st.markdown(f'<div class="papow-card"><b>שוער-הפריסה:</b> {verdict} · '
+                f'קריאות מדורגות: {c0.get("n", 0)} · דיוק: {hr}'
+                f'<div class="sub">{r0.get("reason", "")} — סלוט פנוי נשאר מזומן עד '
+                f'שהדסק מכויל; הון נפרס רק כשהוא הרוויח את הזכות.</div></div>',
+                unsafe_allow_html=True)
+    with st.expander("🧭 מנוע-הקצב המלא (Deal Desk)"):
+        _desk_tab()
     st.caption(f"as of **{board.get('date')}** · desk verdict: **{board.get('desk_verdict')}**")
     cols = st.columns(4)
     for i, s in enumerate((board.get("slots") or [])[:4]):
@@ -491,11 +511,6 @@ def _vip_tab() -> None:
         mag = ' <span class="papow-chip gold">🧲 מגנט-כסף</span>' if m.get("magnet")             else ""
         if m.get("thesis"):
             mag += f' <span class="papow-chip">🧪 תזה: {m.get("thesis")}</span>'
-        _BEHAV_HE = {"CROWDED_SHORT": "🩳 שורט צפוף", "EXTREME_SHORT_INTEREST": "🧨 שורט קיצוני",
-                     "SQUEEZE_PRESSURE_BUILDING": "🔥 לחץ-סקוויז", "ACTIVE_SQUEEZE": "🚀 סקוויז פעיל",
-                     "SQUEEZE_EXHAUSTION": "🎇 סקוויז מתפוגג",
-                     "INSIDER_OPEN_MARKET_CLUSTER": "👔 קניות-פנים",
-                     "RETAIL_CHASE_INTO_STRENGTH": "🎪 רדיפת-ריטייל"}
         beh = "".join(f' <span class="papow-chip cyan">🧬 {_BEHAV_HE.get(x, x)}</span>'
                       for x in (m.get("behavior_states") or []))
         st.markdown(
@@ -512,24 +527,50 @@ def _vip_tab() -> None:
         st.success(f"💥 {d.get('ticker')}: **{d.get('decision')}** · מטרי "
                    f"{'✅' if mv.get('pass') else '❌'} · איכותני "
                    f"{'✅' if qv.get('pass') else '❌'} — {d.get('explanation')}")
+    st.caption("תור-הכניסה המלא (מבשילים, מקורות, קודי-סיבה, תזות) — בטאב 🚪 תור-VIP.")
+
+
+def _vip_queue_tab() -> None:
+    """The ENTRY queue — who is maturing toward VIP, from which lane, and why (owner
+    13.07: managed separately from the deal manager)."""
+    q = _latest_note("vip_board")
+    if not q:
+        st.info("אין עדיין תצלום-VIP — הריצה הלילית תייצר אותו")
+        return
+    cap = q.get("capacity") or {}
+    c1, c2 = st.columns(2)
+    c1.metric("👑 קיבולת VIP", cap.get("vip", "—"))
+    c2.metric("🔬 בניתוח-עומק", cap.get("deep", "—"))
+    members = q.get("members") or []
+    rest = [m for m in members if not str(m.get("status", "")).startswith(
+        ("DEEP", "DECISION", "CONTINUE_DEEP"))]
     if rest:
-        st.markdown("#### שאר הרשימה")
+        st.markdown("#### מבשילים בתור")
         st.dataframe(pd.DataFrame([{
             "ticker": m.get("ticker"),
             "שלב": _STAGE_HE.get(str(m.get("status")), m.get("status")),
             "בשלות": m.get("maturity"), "חסר": m.get("missing_gate"),
-            "גיל-VIP": m.get("vip_age_days"), "מקור": m.get("source")}
+            "גיל-VIP": m.get("vip_age_days"), "מקור": m.get("source"),
+            "🧲": "🧲" if m.get("magnet") else "", "🧪": m.get("thesis") or ""}
             for m in rest]), use_container_width=True, hide_index=True)
+    else:
+        st.caption("אין שמות בהבשלה כרגע — התור ריק וזה נתון, לא תקלה.")
+    _thesis_card()                      # theses ARE an entry lane — they live here
     ev = q.get("events_today") or []
     if ev:
         with st.expander(f"🧾 reason codes של הלילה ({len(ev)})"):
             for e in ev:
                 st.caption(f"{e.get('ticker')} · {e.get('reason_code')} — "
                            f"{e.get('detail')}")
-    _thesis_card()
 
 
 _TH_HE = {"DORMANT": "🛌 רדומה", "WARMING": "🌡️ מתחממת", "AWAKE": "🚨 ערה"}
+
+_BEHAV_HE = {"CROWDED_SHORT": "🩳 שורט צפוף", "EXTREME_SHORT_INTEREST": "🧨 שורט קיצוני",
+             "SQUEEZE_PRESSURE_BUILDING": "🔥 לחץ-סקוויז", "ACTIVE_SQUEEZE": "🚀 סקוויז פעיל",
+             "SQUEEZE_EXHAUSTION": "🎇 סקוויז מתפוגג",
+             "INSIDER_OPEN_MARKET_CLUSTER": "👔 קניות-פנים",
+             "RETAIL_CHASE_INTO_STRENGTH": "🎪 רדיפת-ריטייל"}
 
 
 def _thesis_card() -> None:
@@ -679,6 +720,43 @@ def _leadership_tab() -> None:
                "(אופק ≤4 שבועות). מול Yahoo/TradingView: יום ושבוע (5d) זהים אחד-לאחד; "
                "ה'חודש' שלהם קלנדרי, ולכן סטייה קטנה מול 20d צפויה ואינה שגיאה. "
                "עמודות ריקות = מפה מלפני העדכון (מתמלא בריצת-הלילה).")
+    # money flows + the behavioral third lens (owner 13.07: depth belongs here)
+    st.markdown("#### 💸 זרימות-הכסף והעדשה-ההתנהגותית")
+    flows = []
+    for key, icon in (("locomotive_mix", "🚂"), ("sector_rotation", "🔄"),
+                      ("smart_money_pulse", "🫀")):
+        blk = m.get(key) or {}
+        if blk.get("read_he"):
+            flows.append(f"- {icon} {blk['read_he']}")
+    if flows:
+        st.markdown("\n".join(flows))
+    else:
+        st.caption("אין קריאות-זרימה במפה הנוכחית.")
+    beh = _latest_note("behavior_states")
+    if beh:
+        tally: dict[str, int] = {}
+        chips = []
+        for t, states in list(beh.items())[:40]:
+            if not isinstance(states, list):
+                continue
+            names = [s.get("state") if isinstance(s, dict) else str(s) for s in states]
+            for n0 in names:
+                tally[str(n0)] = tally.get(str(n0), 0) + 1
+            if names and len(chips) < 8:
+                chips.append(f'<span class="papow-chip cyan">🧬 {t}: '
+                             + " · ".join(_BEHAV_HE.get(str(x), str(x))
+                                          for x in names[:2]) + "</span>")
+        if tally:
+            st.markdown("**תצפיות-התנהגות הלילה:** " + " · ".join(
+                f"{_BEHAV_HE.get(k, k)}×{v}"
+                for k, v in sorted(tally.items(), key=lambda x: -x[1])[:5]))
+        if chips:
+            st.markdown('<div class="papow-ribbon">' + "".join(chips) + "</div>",
+                        unsafe_allow_html=True)
+        st.caption("עדשה-שלישית, תצפית בלבד — המתאם בינה לבין זרימות-הכסף נמדד ביומן "
+                   "(וקטור עצמאי); טרם נקבעה סיבתיות ולא נבנה ממנה שער.")
+    else:
+        st.caption("🧬 אין עדיין note-התנהגות — נכתב בריצה הלילית.")
     for k, v in (m.get("caveats") or {}).items():
         st.caption(f"⚠️ {k}: {v}")
 
@@ -811,20 +889,22 @@ def main() -> None:
     _gate()
     _hero("read-only cockpit · demo/paper · לא ייעוץ, לא פקודות")
     _ribbon()
-    tabs = st.tabs(["🚦 Operator", "🎰 Slots", "👑 VIP", "🧭 Deal Desk", "📋 Watchlists",
-                    "🌍 Leadership", "🛠 Improvement", "📖 Ozbeki"])
+    # order = the owner's working process (RTL: first renders rightmost): the deal
+    # manager and VIP first, the entry queue beside them, context next, ops last.
+    tabs = st.tabs(["💼 עסקאות", "👑 VIP", "🚪 תור-VIP", "🦅 הובלה", "📡 רשימות",
+                    "🚦 מפעיל", "🛠 שיפורים", "📖 אוזבקי"])
     with tabs[0]:
-        _operator_tab()
-    with tabs[1]:
         _slots_tab()
-    with tabs[2]:
+    with tabs[1]:
         _vip_tab()
+    with tabs[2]:
+        _vip_queue_tab()
     with tabs[3]:
-        _desk_tab()
+        _leadership_tab()
     with tabs[4]:
         _watchlists_tab()
     with tabs[5]:
-        _leadership_tab()
+        _operator_tab()
     with tabs[6]:
         _improvement_tab()
     with tabs[7]:
