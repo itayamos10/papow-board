@@ -549,6 +549,11 @@ def _slots_tab() -> None:
                 else:
                     st.warning("⚠️ לא עבר ניתוח-עומק VIP ואימות שני-מפתחות — הגיע "
                                "מצינור-השערים המטרי בלבד. זה בדיוק מה שהשער הזה בודק.")
+                beh_states = [str(x) for x in vm.get("behavior_states") or []]
+                if beh_states:
+                    st.markdown("🧬 **העדשה-השלישית (חיזוק-הקשר, לא שער):** "
+                                + " · ".join(_BEHAV_HE.get(s, s)
+                                             for s in beh_states[:3]))
                 # 5 ── the competition: who lost the slot and why
                 if nb:
                     st.markdown("**מי התחרה ולא נבחר:** " + " · ".join(
