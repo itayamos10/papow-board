@@ -306,20 +306,31 @@ def _mailing_list_ui() -> None:
         st.success(f"{new_mail} נוסף — מייל-ה-onboarding יישלח תוך ~5 דקות (דרך הזקיף)")
     try:
         with _engine().connect() as c:
-            rows = c.execute(text('select email, status, added_at, onboarded_at, '
-                                  'removed_at from mailing_list order by email')).fetchall()
+            c.execute(text('alter table mailing_list add column if not exists '
+                           'last_sent_kind text default \'\''))
+            c.execute(text('alter table mailing_list add column if not exists '
+                           'last_sent_at text default \'\''))
+            rows = c.execute(text(
+                'select email, status, added_at, onboarded_at, removed_at, '
+                'last_sent_kind, last_sent_at from mailing_list order by email')).fetchall()
     except Exception:
         rows = []
     if not rows:
         st.caption("הרשימה ריקה — כל כתובת שתוסיף תישמר כאן עם הסטטוס שלה.")
         return
     he = {"pending": "🟡 ממתין ל-onboarding", "active": "🟢 פעיל", "removed": "⚪ הוסר"}
-    for email, status, added, onb, rem in rows:
+    kind_he = {"morning_0930": "☀️ 09:30", "premarket_1130": "🌅 11:30",
+               "prep_1530": "🧭 15:30", "session_1830": "🏛️ 18:30",
+               "close_2200": "🌆 22:00"}
+    for email, status, added, onb, rem, lsk, lsa in rows:
         c1, c2, c3 = st.columns([3, 2, 1])
         c1.markdown(f"**{email}**")
+        last = (f" · 📬 אחרון: {kind_he.get(str(lsk), lsk)} ({str(lsa)[:16]})"
+                if lsk else " · 📭 טרם נשלח דוח")
         c2.caption(f"{he.get(str(status), status)} · נוסף {added}"
                    + (f" · הצטרף {onb}" if onb else "")
-                   + (f" · הוסר {rem}" if rem else ""))
+                   + (f" · הוסר {rem}" if rem else "")
+                   + (last if status == "active" else ""))
         if status != "removed" and c3.button("🗑 הסר", key=f"ml_rm_{email}"):
             _ml_write('update mailing_list set status = \'removed\', removed_at = :d '
                       'where email = :e',
