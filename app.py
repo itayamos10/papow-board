@@ -65,9 +65,15 @@ button[data-baseweb="tab"] { font-weight:600; }
 section.main, [data-testid="stAppViewContainer"] > section { direction:rtl !important; }
 [data-testid="stMarkdownContainer"] { text-align:right; }
 [data-testid="stMetric"] { direction:rtl; text-align:right; }
+div[data-testid="stTabs"] { direction:rtl !important; }
+div[data-testid="stTabs"] [data-baseweb="tab-list"],
+div[data-testid="stTabs"] div[role="tablist"],
 .stTabs [data-baseweb="tab-list"] { direction:rtl !important;
   justify-content:flex-start !important; }
+div[data-testid="stTabs"] button[role="tab"],
 .stTabs [data-baseweb="tab-list"] button { direction:rtl; }
+div[data-testid="stTabs"] [data-baseweb="tab-highlight"],
+div[data-testid="stTabs"] [data-baseweb="tab-border"] { direction:rtl !important; }
 [data-testid="stExpander"] summary { direction:rtl; text-align:right; }
 [data-testid="stCaptionContainer"] { text-align:right; }
 [data-testid="stHorizontalBlock"] { direction:rtl; }
