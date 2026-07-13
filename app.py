@@ -209,13 +209,14 @@ def _latest_note(kind: str) -> dict[str, Any] | None:
         return None
 
 
-def _approve_trade(ticker: str, decision: str) -> None:
-    """The manager's yes/no on a pending fill — written as a research note the engine
-    reads at fill time (approve fills at next open; reject drops; silence expires)."""
+def _approve_trade(ticker: str, decision: str, reason: str = "") -> None:
+    """The manager's yes/no/undo on a pending fill — a research note the engine reads at
+    fill time (approve fills next open; reject drops + the reason feeds the org memory;
+    undo returns the decision to WAITING while its expiry clock keeps running)."""
     today = date.today().isoformat()
     nid = f"trade_approval:{ticker}:{today}"
     payload = json.dumps({"ticker": ticker, "decision": decision, "date": today,
-                          "by": "board"}, ensure_ascii=False)
+                          "reason": reason, "by": "board"}, ensure_ascii=False)
     with _engine().begin() as c:
         c.execute(text(
             'insert into research_notes (id, date, kind, title, content) '
@@ -463,11 +464,12 @@ def _slots_tab() -> None:
         st.markdown("#### 🔐 החלטות-קנייה ממתינות לאישורך")
         st.caption("אישור = מילוי בפתיחת-המסחר הבאה (CC001 — מעובד בריצת 23:15); דחייה "
                    "מפילה; שתיקה של 3 סשנים מפקיעה.")
-        appr: dict[str, str] = {}
+        appr: dict[str, dict[str, str]] = {}
         for n in _notes_of("trade_approval", 30):          # newest first per ticker
             t0 = str(n.get("ticker", "")).upper()
             if t0 and t0 not in appr:
-                appr[t0] = str(n.get("decision"))
+                appr[t0] = {"decision": str(n.get("decision")),
+                            "reason": str(n.get("reason") or "")}
         pipe_rows = {str(r.get("ticker")): r for r in board.get("pipeline") or []}
         vip_m = {str(m.get("ticker")): m
                  for m in (_latest_note("vip_board") or {}).get("members") or []}
@@ -483,18 +485,36 @@ def _slots_tab() -> None:
             c1.markdown(f"**{t}** · ₪{p.get('alloc', 0):,.0f} · הוחלט "
                         f"{p.get('decision_date')} · ממתין "
                         f"{p.get('sessions_waiting', 0)}/3 סשנים")
-            my = appr.get(t)
+            my = (appr.get(t) or {}).get("decision")
+            my_reason = (appr.get(t) or {}).get("reason") or ""
             if my == "approve":
                 c2.markdown("✅ **אושר על-ידך** — ימולא בפתיחה הבאה")
+                if c3.button("↩️ בטל", key=f"tru_{t}",
+                             help="החזרה להמתנה — אפשרי עד המילוי (ריצת 23:15)"):
+                    _approve_trade(t, "undo", "החלטה בוטלה על-ידי המנהל")
+                    st.rerun()
             elif my == "reject":
-                c2.markdown("❌ **נדחה על-ידך** — תוסר בריצה הבאה")
+                c2.markdown("❌ **נדחה על-ידך**"
+                            + (f" — _{my_reason[:60]}_" if my_reason else ""))
+                if c3.button("↩️ בטל", key=f"tru_{t}",
+                             help="ביטול הדחייה — חוזרת להמתנה"):
+                    _approve_trade(t, "undo", "דחייה בוטלה על-ידי המנהל")
+                    st.rerun()
             else:
                 if c2.button("✅ אשר", key=f"tra_{t}"):
                     _approve_trade(t, "approve")
                     st.rerun()
                 if c3.button("❌ דחה", key=f"trr_{t}"):
-                    _approve_trade(t, "reject")
-                    st.rerun()
+                    st.session_state[f"rej_{t}"] = True
+                if st.session_state.get(f"rej_{t}"):
+                    rsn = st.text_input(
+                        "למה נדחתה? (נשמר בזיכרון הארגוני וביומן-ההחלטות)",
+                        key=f"rejr_{t}",
+                        placeholder="למשל: מתוחה מדי אחרי הריצה; אין לי אמון בסקטור השבוע")
+                    if st.button("אשר דחייה", key=f"rejc_{t}") and rsn.strip():
+                        _approve_trade(t, "reject", rsn.strip())
+                        st.session_state[f"rej_{t}"] = False
+                        st.rerun()
             with st.expander(f"🔎 {t} — הסינתזה המלאה להחלטה"):
                 # 1 ── why it was chosen + the standard it sits on
                 st.markdown(f"**למה נבחרה:** {row.get('why') or 'שורת-הצנרת לא זמינה'}")
