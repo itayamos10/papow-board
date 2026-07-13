@@ -755,6 +755,8 @@ def _vip_tab() -> None:
         mag = ' <span class="papow-chip gold">🧲 מגנט-כסף</span>' if m.get("magnet")             else ""
         if m.get("thesis"):
             mag += f' <span class="papow-chip">🧪 תזה: {m.get("thesis")}</span>'
+        if m.get("correlative"):
+            mag += f' <span class="papow-chip">🧩 מפגר-אשכול: {m.get("correlative")}</span>'
         beh = "".join(f' <span class="papow-chip cyan">🧬 {_BEHAV_HE.get(x, x)}</span>'
                       for x in (m.get("behavior_states") or []))
         st.markdown(
@@ -795,7 +797,8 @@ def _vip_queue_tab() -> None:
             "שלב": _STAGE_HE.get(str(m.get("status")), m.get("status")),
             "בשלות": m.get("maturity"), "חסר": m.get("missing_gate"),
             "גיל-VIP": m.get("vip_age_days"), "מקור": m.get("source"),
-            "🧲": "🧲" if m.get("magnet") else "", "🧪": m.get("thesis") or ""}
+            "🧲": "🧲" if m.get("magnet") else "", "🧪": m.get("thesis") or "",
+            "🧩": m.get("correlative") or ""}
             for m in rest]), use_container_width=True, hide_index=True)
     else:
         st.caption("אין שמות בהבשלה כרגע — התור ריק וזה נתון, לא תקלה.")
@@ -872,9 +875,13 @@ def _thesis_card() -> None:
         qt = s.get("qual_today") or []
         silent = s.get("days_since_news")
         if qt:
-            bits.append(f"📰 {len(qt)} כותרות-פרופיל היום")
+            senti = s.get("qual_sentiment") or {}
+            tone = (f" (👍{senti.get('positive', 0)}/👎{senti.get('negative', 0)})"
+                    if senti.get("positive") or senti.get("negative") else "")
+            bits.append(f"📰 {len(qt)} כותרות-פרופיל היום{tone}")
         elif silent is not None:
-            bits.append(f"🔇 שקט {silent} ימ'")
+            thr = s.get("feed_starved_days")
+            bits.append(f"🔇 שקט {silent} ימ'" + (f" (סף {thr})" if thr else ""))
         st.markdown(f"**{s.get('title_he')}** — " + " · ".join(str(b) for b in bits))
         if s.get("reasons"):
             st.caption(" · ".join(str(r) for r in s["reasons"][:2]))
@@ -911,6 +918,12 @@ def _watchlists_tab() -> None:
     st.caption("★ חודש-מסחר = 20 ימי-מסחר ≈ חודש קלנדרי — חלון-ההחלטה של הסווינג "
                "(מול Yahoo/TradingView: יום/שבוע זהים; 'חודש' אצלם קלנדרי — סטייה קטנה "
                "צפויה).")
+    _typ_he = {"provenance": "מקור", "basis": "בסיס ראייתי", "purpose": "משפט-החלטה",
+               "feed": "הזנה", "entry": "תנאי-כניסה", "maturation": "הבשלה",
+               "decision_window": "חלון-החלטה", "expiry": "פקיעה",
+               "vip_lane": "נתיב-VIP", "measurement_hook": "מדידה",
+               "resistance": "התנגדות"}
+    _top_level = ("provenance", "basis", "purpose", "measurement_hook")
     for wl in w.get("watchlists", []):
         st.markdown(f"**[{wl.get('provenance')}·{wl.get('basis')}] {wl.get('kind')}** — "
                     f"{wl.get('purpose')}")
@@ -918,7 +931,17 @@ def _watchlists_tab() -> None:
             df = pd.DataFrame(wl["members"]).rename(columns={
                 "ret_20d": "חודש-מסחר % ★", "ret_1d": "יום %", "ret_5d": "שבוע %"})
             st.dataframe(df, use_container_width=True, hide_index=True)
-        st.caption(f"⚖️ {wl.get('measurement_hook')}")
+        typing = wl.get("typing") or {}
+        filled = sum(1 for f in _typ_he
+                     if typing.get(f) or (f in _top_level and wl.get(f)))
+        st.caption(f"⚖️ {wl.get('measurement_hook')} · 🏷️ טיפוס {filled}/{len(_typ_he)}"
+                   + ("" if filled == len(_typ_he)
+                      else " (חלקי — סימן-בדיקה, לא פסילה)"))
+        if typing:
+            with st.expander(f"🏷️ תעודת-הזהות של הרשימה ({wl.get('kind')})"):
+                for f in _typ_he:
+                    v = typing.get(f) or (wl.get(f) if f in _top_level else None)
+                    st.markdown(f"- **{_typ_he[f]}:** {v or '— חסר'}")
 
 
 _ALIGN_HE = {"confirmed": ("מגובה-חדשות", "volt"),
