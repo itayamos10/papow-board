@@ -66,11 +66,11 @@ button[data-baseweb="tab"] { font-weight:600; }
 
 
 def _logo_html(height: int = 40) -> str:
-    """L1: the real vector lockup (outlined text — no font dependency), inlined base64."""
+    """L1: the OWNER'S original logo art (transparent, compact row), inlined base64."""
     try:
-        raw = (Path(__file__).parent / "assets/lockup-compact.svg").read_bytes()
+        raw = (Path(__file__).parent / "assets/logo-compact.png").read_bytes()
         b64 = base64.b64encode(raw).decode()
-        return (f'<img src="data:image/svg+xml;base64,{b64}" alt="PapoW" '
+        return (f'<img src="data:image/png;base64,{b64}" alt="PapoW" '
                 f'style="height:{height}px;vertical-align:middle">')
     except OSError:                                        # asset missing -> text fallback
         return '<span class="papow-word">Papo<span class="hit">W</span></span>'
