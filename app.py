@@ -62,12 +62,16 @@ button[data-baseweb="tab"] { font-weight:600; }
 .papow-card .sub, .papow-card .tkr { unicode-bidi:plaintext; }
 [data-testid="stDataFrame"] { direction:ltr; }  /* tables stay LTR — numbers align */
 /* ---- full RTL for the Israeli user (owner 13.07): the WHOLE surface reads right-to-left */
-section.main, [data-testid="stAppViewContainer"] > section { direction:rtl; }
+section.main, [data-testid="stAppViewContainer"] > section { direction:rtl !important; }
 [data-testid="stMarkdownContainer"] { text-align:right; }
 [data-testid="stMetric"] { direction:rtl; text-align:right; }
-.stTabs [data-baseweb="tab-list"] { direction:rtl; justify-content:flex-start; }
+.stTabs [data-baseweb="tab-list"] { direction:rtl !important;
+  justify-content:flex-start !important; }
+.stTabs [data-baseweb="tab-list"] button { direction:rtl; }
 [data-testid="stExpander"] summary { direction:rtl; text-align:right; }
 [data-testid="stCaptionContainer"] { text-align:right; }
+[data-testid="stHorizontalBlock"] { direction:rtl; }
+[data-testid="stAlert"] { direction:rtl; text-align:right; }
 </style>
 """
 
@@ -84,11 +88,22 @@ def _logo_html(height: int = 40) -> str:
 
 
 def _hero(sub: str = "") -> None:
+    """L1 header, Hebrew-first: the logo sits on the RIGHT, slogan aligned beside it;
+    disclaimers do NOT live here — they are one line at the page bottom (_footer)."""
     st.markdown(_CSS, unsafe_allow_html=True)
-    st.markdown('<div style="display:flex;align-items:center;gap:16px" dir="ltr">'
+    st.markdown('<div style="display:flex;align-items:center;gap:16px;'
+                'flex-direction:row;direction:rtl">'
                 + _logo_html(44)
-                + '<div class="papow-tag">watch. <span class="hit">aim.</span> PapoW'
-                + (f' &nbsp;·&nbsp; {sub}' if sub else '') + '</div></div>',
+                + '<div class="papow-tag" dir="ltr" style="text-align:left">watch. '
+                '<span class="hit">aim.</span> PapoW</div></div>',
+                unsafe_allow_html=True)
+
+
+def _footer() -> None:
+    st.markdown('<div style="margin-top:28px;padding-top:10px;border-top:1px solid '
+                '#232E4A;color:#8B96AC;font-size:11px;text-align:center">'
+                'קוקפיט לקריאה-בלבד · דמו/נייר · לא ייעוץ ולא פקודות · '
+                '<span dir="ltr">watch. aim. PapoW</span></div>',
                 unsafe_allow_html=True)
 
 
@@ -681,10 +696,54 @@ def _story_cards(tape) -> None:
 
 
 def _leadership_tab() -> None:
+    """Order matters (owner, 5th ask): the VERIFIABLE numbers open the tab — every figure
+    with an explicit window a user can check on Yahoo/TradingView — and only then the
+    narrative, behind a loud window-disclaimer. Trust before story."""
     m = _latest("leadership_snapshots") or {}
+    story = m.get("market_story") or {}
+
+    # 1 ── the numbers a user checks first, windows explicit, straight from the map
+    st.markdown("#### 🔢 המדדים — יום · שבוע · חודש-מסחר")
+    idx_rows = []
+    for sym in ("SPY", "QQQ"):
+        r = (story.get(sym) or {}).get("returns") or {}
+        if r:
+            idx_rows.append({"": sym, "יום %": r.get("1d"), "שבוע (5d) %": r.get("5d"),
+                             "חודש-מסחר (20d) % ★": r.get("20d")})
+    if idx_rows:
+        st.dataframe(pd.DataFrame(idx_rows), use_container_width=True, hide_index=True)
+    secs = m.get("leading_sectors") or []
+    if secs:
+        st.markdown("**הסקטורים המובילים**")
+        st.dataframe(pd.DataFrame([{"sector": s["sector"],
+                                    "יום %": ((s.get("returns") or {}).get("1d")),
+                                    "שבוע (5d) %": ((s.get("returns") or {}).get("5d")),
+                                    "חודש-מסחר (20d) % ★":
+                                    ((s.get("returns") or {}).get("20d")),
+                                    "persistence":
+                                    (s.get("persistence") or {}).get("score"),
+                                    "trend": s.get("trend")} for s in secs]),
+                     use_container_width=True, hide_index=True)
+    st.markdown("**המניות המובילות**")
+    st.dataframe(pd.DataFrame([{"ticker": c["ticker"], "sector": c.get("sector"),
+                                "pocket": c.get("pocket_id"),
+                                "יום %": c.get("ret_1d"),
+                                "שבוע (5d) %": c.get("ret_5d"),
+                                "חודש-מסחר (20d) % ★": c.get("ret_20d"),
+                                "stage": c.get("move_stage")}
+                               for c in m.get("stock_leaders", [])]),
+                 use_container_width=True, hide_index=True)
+    st.caption("★ חודש-מסחר = 20 ימי-מסחר ≈ חודש קלנדרי — חלון-ההחלטה של הסווינג (אופק "
+               "≤4 שבועות). יום ושבוע זהים ל-Yahoo/TradingView אחד-לאחד; ה'חודש' שלהם "
+               "קלנדרי — סטייה קטנה צפויה. עמודות ריקות מתמלאות בריצת-הלילה.")
+
+    # 2 ── the narrative, ONLY after the numbers, behind an explicit window warning
+    if story.get("narrative") or (m.get("tape_story") or {}).get("market_paragraph"):
+        st.markdown("#### 📰 הסיפור")
+        st.warning("⚠️ מספר בסיפור שלמטה בלי תווית-חלון מפורשת = **חודש-מסחר (20 ימי "
+                   "מסחר)**, לא יום ולא שבוע. לאימות מהיר — הטבלאות שלמעלה.")
     tape = m.get("tape_story") or {}
     if tape.get("market_paragraph"):
-        st.markdown("**📰 סיפור היום — חדשות מול תנועה**")
         st.info(tape["market_paragraph"])
         if tape.get("stocks_paragraph"):
             st.info(tape["stocks_paragraph"])
@@ -694,32 +753,8 @@ def _leadership_tab() -> None:
                        f"{led.get('contradicted', 0)} בניגוד · "
                        f"{led.get('no_news_move', 0)} בלי סיפור — היפותזה פתוחה, הקשר בלבד")
         _story_cards(tape)
-    story = m.get("market_story") or {}
     if story.get("narrative"):
-        st.info(story["narrative"])
-    secs = m.get("leading_sectors") or []
-    if secs:
-        st.dataframe(pd.DataFrame([{"sector": s["sector"],
-                                    "יום %": ((s.get("returns") or {}).get("1d")),
-                                    "שבוע %": ((s.get("returns") or {}).get("5d")),
-                                    "חודש-מסחר % ★": ((s.get("returns") or {}).get("20d")),
-                                    "persistence":
-                                    (s.get("persistence") or {}).get("score"),
-                                    "trend": s.get("trend")} for s in secs]),
-                     use_container_width=True, hide_index=True)
-    st.markdown("**leaders**")
-    st.dataframe(pd.DataFrame([{"ticker": c["ticker"], "sector": c.get("sector"),
-                                "pocket": c.get("pocket_id"),
-                                "יום %": c.get("ret_1d"),
-                                "שבוע %": c.get("ret_5d"),
-                                "חודש-מסחר % ★": c.get("ret_20d"),
-                                "stage": c.get("move_stage")}
-                               for c in m.get("stock_leaders", [])]),
-                 use_container_width=True, hide_index=True)
-    st.caption("★ **חודש-מסחר = 20 ימי-מסחר ≈ חודש קלנדרי — חלון-ההחלטה של הסווינג שלנו** "
-               "(אופק ≤4 שבועות). מול Yahoo/TradingView: יום ושבוע (5d) זהים אחד-לאחד; "
-               "ה'חודש' שלהם קלנדרי, ולכן סטייה קטנה מול 20d צפויה ואינה שגיאה. "
-               "עמודות ריקות = מפה מלפני העדכון (מתמלא בריצת-הלילה).")
+        st.caption(story["narrative"])
     # money flows + the behavioral third lens (owner 13.07: depth belongs here)
     st.markdown("#### 💸 זרימות-הכסף והעדשה-ההתנהגותית")
     flows = []
@@ -887,7 +922,7 @@ def _ozbeki_tab() -> None:
 
 def main() -> None:
     _gate()
-    _hero("read-only cockpit · demo/paper · לא ייעוץ, לא פקודות")
+    _hero()
     _ribbon()
     # order = the owner's working process (RTL: first renders rightmost): the deal
     # manager and VIP first, the entry queue beside them, context next, ops last.
@@ -909,6 +944,7 @@ def main() -> None:
         _improvement_tab()
     with tabs[7]:
         _ozbeki_tab()
+    _footer()
 
 
 main()
