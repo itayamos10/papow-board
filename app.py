@@ -280,6 +280,55 @@ def _decide(cid: str, approve: bool, reason: str = "") -> None:
     _changes.clear()
 
 
+def _ml_write(sql: str, params: dict) -> None:
+    with _engine().begin() as c:
+        c.execute(text('create table if not exists mailing_list ('
+                       'email text primary key, status text, added_at text, '
+                       'onboarded_at text, removed_at text)'))
+        c.execute(text(sql), params)
+
+
+def _mailing_list_ui() -> None:
+    """Owner 13.07: structured add/remove for the distribution list. An added address
+    becomes PENDING; the sentinel (5-min tick) sends the branded onboarding and flips it
+    to ACTIVE. Removal keeps the row — every email stays in the DB with its status."""
+    st.markdown("#### 📧 רשימת-התפוצה")
+    c1, c2 = st.columns([3, 1])
+    new_mail = c1.text_input("הוספת מייל", key="ml_add",
+                             placeholder="name@example.com").strip().lower()
+    if c2.button("➕ הוסף") and "@" in new_mail and "." in new_mail.split("@")[-1]:
+        today = date.today().isoformat()
+        _ml_write('insert into mailing_list (email, status, added_at, onboarded_at, '
+                  'removed_at) values (:e, :s, :d, \'\', \'\') '
+                  'on conflict (email) do update set status = :s, added_at = :d, '
+                  'removed_at = \'\'',
+                  {"e": new_mail, "s": "pending", "d": today})
+        st.success(f"{new_mail} נוסף — מייל-ה-onboarding יישלח תוך ~5 דקות (דרך הזקיף)")
+    try:
+        with _engine().connect() as c:
+            rows = c.execute(text('select email, status, added_at, onboarded_at, '
+                                  'removed_at from mailing_list order by email')).fetchall()
+    except Exception:
+        rows = []
+    if not rows:
+        st.caption("הרשימה ריקה — כל כתובת שתוסיף תישמר כאן עם הסטטוס שלה.")
+        return
+    he = {"pending": "🟡 ממתין ל-onboarding", "active": "🟢 פעיל", "removed": "⚪ הוסר"}
+    for email, status, added, onb, rem in rows:
+        c1, c2, c3 = st.columns([3, 2, 1])
+        c1.markdown(f"**{email}**")
+        c2.caption(f"{he.get(str(status), status)} · נוסף {added}"
+                   + (f" · הצטרף {onb}" if onb else "")
+                   + (f" · הוסר {rem}" if rem else ""))
+        if status != "removed" and c3.button("🗑 הסר", key=f"ml_rm_{email}"):
+            _ml_write('update mailing_list set status = \'removed\', removed_at = :d '
+                      'where email = :e',
+                      {"e": email, "d": date.today().isoformat()})
+            st.rerun()
+    st.caption("המנויים מקבלים את הדוחות המתוזמנים בלבד (BCC — כתובות לא נחשפות זו לזו); "
+               "דחיפות תפעוליות (🔐/🎯/🚨) נשארות למנהל בלבד.")
+
+
 # ---------- views ----------
 _STATE_HE = {"hold": "בפוזיציה", "buy_signal": "אות קנייה", "candidate": "מועמדת",
              "watch": "מעקב"}
@@ -306,6 +355,8 @@ _RECOVERY = {
 
 def _operator_tab() -> None:
     from datetime import date, timedelta
+    _mailing_list_ui()
+    st.divider()
     today = date.today().isoformat()
     prev = today
     for _ in range(4):                          # last expected NY session (weekend-aware)
