@@ -1018,6 +1018,9 @@ def _leadership_tab() -> None:
         _story_cards(tape)
     if story.get("narrative"):
         st.caption(story["narrative"])
+    rg = m.get("regime_v2") or {}
+    if rg.get("read_he"):
+        st.info("🌊 " + str(rg["read_he"]))
     # money flows + the behavioral third lens (owner 13.07: depth belongs here)
     st.markdown("#### 💸 זרימות-הכסף והעדשה-ההתנהגותית")
     flows = []
