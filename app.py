@@ -1100,6 +1100,17 @@ def _leadership_tab() -> None:
 def _improvement_tab() -> None:
     st.caption("Approve = log + monitor + queue. NOTHING auto-applies; approved changes are "
                "implemented in a batch when the logic engine opens.")
+    # the CLOSED learning loop (owner 14.07): matured journal reviews graded fwd-vs-QQQ
+    jr = ((_latest("leadership_snapshots") or {}).get("learning")
+          or {}).get("journal_reviews") or {}
+    if jr:
+        st.markdown("#### 🎓 הלולאה עונה — ביקורות-החלטה שהבשילו")
+        st.caption(f"נסגרו הלילה: {jr.get('closed', 0)} · ממתינות לחלון מלא: "
+                   f"{jr.get('waiting', 0)} · דורשות שיפוט-אנושי: "
+                   f"{jr.get('manual_open', 0)} (עולות במוצ\"ש)")
+        for les in jr.get("lessons") or []:
+            st.markdown(f"- {les}")
+        st.divider()
     allc = _changes()
     active = [c for c in allc if c["status"] in ("proposed", "approved")]
     archived = [c for c in allc if c["status"] not in ("proposed", "approved")]
