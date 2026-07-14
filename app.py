@@ -757,6 +757,9 @@ def _vip_tab() -> None:
             mag += f' <span class="papow-chip">🧪 תזה: {m.get("thesis")}</span>'
         if m.get("correlative"):
             mag += f' <span class="papow-chip">🧩 מפגר-אשכול: {m.get("correlative")}</span>'
+        if m.get("invalidation_broken"):
+            mag += (f' <span class="papow-chip coral">🛑 invalidation נשבר '
+                    f'({m.get("invalidation_level")}) — אין החלטה עד ניתוח מחודש</span>')
         beh = "".join(f' <span class="papow-chip cyan">🧬 {_BEHAV_HE.get(x, x)}</span>'
                       for x in (m.get("behavior_states") or []))
         st.markdown(
@@ -798,7 +801,9 @@ def _vip_queue_tab() -> None:
             "בשלות": m.get("maturity"), "חסר": m.get("missing_gate"),
             "גיל-VIP": m.get("vip_age_days"), "מקור": m.get("source"),
             "🧲": "🧲" if m.get("magnet") else "", "🧪": m.get("thesis") or "",
-            "🧩": m.get("correlative") or ""}
+            "🧩": m.get("correlative") or "",
+            "🛑": f"נשבר {m.get('invalidation_level')}"
+                  if m.get("invalidation_broken") else ""}
             for m in rest]), use_container_width=True, hide_index=True)
     else:
         st.caption("אין שמות בהבשלה כרגע — התור ריק וזה נתון, לא תקלה.")
