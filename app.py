@@ -772,7 +772,8 @@ def _vip_tab() -> None:
                       "IN_DEEP": "🔬 בעומק", "QUEUED": "⏳ בתור-עומק",
                       "NOT_QUEUED": "—", "DEEP_COMPLETE": "🏁 עומק הושלם",
                       "EVICTED": "↩️ פונה (משאב)", "REJECTED": "⛔ נדחה (אנליסט)",
-                      "DECIDED": "💥 הוחלט", "EXPIRED": "⌛ פג", "ACCRUING": "צובר-ימים",
+                      "DECIDED": "💥 הוחלט", "CLOSED": "⚫ נסגרה", "EXPIRED": "⌛ פג",
+                      "ACCRUING": "צובר-ימים",
                       "ELIGIBLE": "✅ כשיר-להחלטה", "BLOCKED_DEGRADED": "🚫 חסום (נחלש)",
                       "BLOCKED_INVALIDATION": "🛑 חסום (invalidation)",
                       "BLOCKED_DATA": "🧊 חסום (דאטה)",
@@ -792,6 +793,12 @@ def _vip_tab() -> None:
                 mag += (f' <span class="papow-chip cyan">🧊 DATA_HOLD — '
                         f'{m.get("data_hold_reason") or "בעיית דאטה"} '
                         f'(שעונים קפואים)</span>')
+            else:
+                _held = [str(ln0.get("list_id")) for ln0 in m.get("list_links") or []
+                         if ln0.get("link_data_status") == "DATA_HOLD"]
+                if _held:   # partial hold: ONE thesis unobservable, the member runs on
+                    mag += (f' <span class="papow-chip cyan">🧊 תזה מוקפאת-דאטה: '
+                            f'{", ".join(_held[:2])}</span>')
         attr_ln = ""
         if m.get("vip_primary_list_id"):
             sup = [ln0.get("list_id") for ln0 in m.get("list_links") or []
