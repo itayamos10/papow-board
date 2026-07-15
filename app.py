@@ -770,21 +770,36 @@ def _vip_tab() -> None:
         if m.get("vip_status"):
             _ax_he = {"ACTIVE": "🟢 פעיל", "DEGRADED": "🟠 נחלש", "EXITED": "⚫ יצא",
                       "IN_DEEP": "🔬 בעומק", "QUEUED": "⏳ בתור-עומק",
-                      "MATURING": "🌱 מבשיל", "DROPPED_FROM_DEEP": "↩️ שוחרר-מעומק",
-                      "DECIDED": "💥 הוחלט", "NONE": "—", "ACCRUING": "צובר-ימים",
+                      "NOT_QUEUED": "—", "DEEP_COMPLETE": "🏁 עומק הושלם",
+                      "EVICTED": "↩️ פונה (משאב)", "REJECTED": "⛔ נדחה (אנליסט)",
+                      "DECIDED": "💥 הוחלט", "EXPIRED": "⌛ פג", "ACCRUING": "צובר-ימים",
                       "ELIGIBLE": "✅ כשיר-להחלטה", "BLOCKED_DEGRADED": "🚫 חסום (נחלש)",
                       "BLOCKED_INVALIDATION": "🛑 חסום (invalidation)",
-                      "SHADOW_BUY": "👻 קניית-צל"}
+                      "BLOCKED_DATA": "🧊 חסום (דאטה)",
+                      "SHADOW_BUY": "👻 קניית-צל", "NO_BUY": "🚷 לא-לקנות",
+                      "DEFER": "⏸️ נדחתה-לטריגר"}
             _s, _d, _c = (m["vip_status"], str(m.get("deep_status")),
                           str(m.get("decision_status")))
+            _out = m.get("decision_outcome")
+            _act = m.get("latest_decision_action")
             axes_ln = (f'<div class="sub">צירים: VIP {_ax_he.get(_s, _s)} · '
                        f'עומק {_ax_he.get(_d, _d)} · החלטה '
-                       f'{_ax_he.get(_c, _c)}</div>')
+                       f'{_ax_he.get(_c, _c)}'
+                       + (f' · תוצאה: {_ax_he.get(str(_out), _out)}' if _out else "")
+                       + (f' · פעולה אחרונה: {_ax_he.get(str(_act), _act)}'
+                          if _act and not _out else "") + '</div>')
+            if m.get("data_status") == "DATA_HOLD":
+                mag += (f' <span class="papow-chip cyan">🧊 DATA_HOLD — '
+                        f'{m.get("data_hold_reason") or "בעיית דאטה"} '
+                        f'(שעונים קפואים)</span>')
         attr_ln = ""
         if m.get("vip_primary_list_id"):
             sup = [ln0.get("list_id") for ln0 in m.get("list_links") or []
                    if ln0.get("role") == "supporting"]
+            ent = m.get("vip_entry_list_id")
             attr_ln = (f'<div class="sub">רשימה ראשית: {m["vip_primary_list_id"]}'
+                       + (f' (הוכנסה ע"י {ent})'
+                          if ent and ent != m.get("vip_primary_list_id") else "")
                        + (f' · מחזקות: {", ".join(str(s) for s in sup[:4])}' if sup else "")
                        + (f' · ייחוס-החלטה: {m["decision_primary_list_id"]}'
                           if m.get("decision_primary_list_id") else "") + "</div>")
