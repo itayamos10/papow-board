@@ -729,16 +729,16 @@ def _vip_tab() -> None:
     c3.metric("💥 החלטות הלילה", len(q.get("decisions") or []))
     members = q.get("members") or []
     deep = [m for m in members if str(m.get("status", "")).startswith(
-        ("DEEP", "DECISION", "CONTINUE_DEEP"))]
-    rest = [m for m in members if m not in deep]
+        ("DEEP", "DECISION", "CONTINUE_DEEP", "SHADOW_BUY"))]   # decided members keep their card
     st.markdown("#### תור-העומק — שני מפתחות, מנעול אחד")
     if not deep:
         st.caption("אין שמות בעומק כרגע — ההבשלה עובדת.")
     for m in deep:
         weakening = "weakening" in (m.get("review_flags") or [])
-        q = m.get("qual") or {}
-        rec, buyable = str(q.get("rec") or ""), q.get("buyable")
-        conf = q.get("confidence")
+        mq = m.get("qual") or {}   # NOT `q` — shadowing the note dict silently killed
+        # the 💥 decision banners on exactly the nights decisions happen
+        rec, buyable = str(mq.get("rec") or ""), mq.get("buyable")
+        conf = mq.get("confidence")
         k1 = ('<span class="papow-key off">🔑 מטרי · נחלש</span>' if weakening
               else '<span class="papow-key on">🔑 מטרי · עובר</span>')
         if buyable is True or rec == "BUY":
@@ -747,7 +747,7 @@ def _vip_tab() -> None:
             k2 = f'<span class="papow-key off">🔑 איכותני · {rec or "לא עכשיו"}</span>'
         else:
             k2 = '<span class="papow-key">🔑 איכותני · צובר</span>'
-        eng = q.get("engine")
+        eng = mq.get("engine")
         gate = f" · חסר: {m.get('missing_gate')}" if m.get("missing_gate") else " · מלאה"
         stage = _STAGE_HE.get(str(m.get("status")), m.get("status"))
         read = (f' · {rec[:110]}' if rec and rec not in ("BUY", "WAIT", "DROP") else "")
@@ -764,12 +764,51 @@ def _vip_tab() -> None:
                     f'({m.get("invalidation_level")}) — אין החלטה עד ניתוח מחודש</span>')
         beh = "".join(f' <span class="papow-chip cyan">🧬 {_BEHAV_HE.get(x, x)}</span>'
                       for x in (m.get("behavior_states") or []))
+        # Sprint 1 (owner 16.07): the three separated axes + attribution + local scores —
+        # the card answers "מה חסר לעסקה, מה מוציא אותה, ומה מצב הדאטה" in one line each
+        axes_ln = ""
+        if m.get("vip_status"):
+            _ax_he = {"ACTIVE": "🟢 פעיל", "DEGRADED": "🟠 נחלש", "EXITED": "⚫ יצא",
+                      "IN_DEEP": "🔬 בעומק", "QUEUED": "⏳ בתור-עומק",
+                      "MATURING": "🌱 מבשיל", "DROPPED_FROM_DEEP": "↩️ שוחרר-מעומק",
+                      "DECIDED": "💥 הוחלט", "NONE": "—", "ACCRUING": "צובר-ימים",
+                      "ELIGIBLE": "✅ כשיר-להחלטה", "BLOCKED_DEGRADED": "🚫 חסום (נחלש)",
+                      "BLOCKED_INVALIDATION": "🛑 חסום (invalidation)",
+                      "SHADOW_BUY": "👻 קניית-צל"}
+            _s, _d, _c = (m["vip_status"], str(m.get("deep_status")),
+                          str(m.get("decision_status")))
+            axes_ln = (f'<div class="sub">צירים: VIP {_ax_he.get(_s, _s)} · '
+                       f'עומק {_ax_he.get(_d, _d)} · החלטה '
+                       f'{_ax_he.get(_c, _c)}</div>')
+        attr_ln = ""
+        if m.get("vip_primary_list_id"):
+            sup = [ln0.get("list_id") for ln0 in m.get("list_links") or []
+                   if ln0.get("role") == "supporting"]
+            attr_ln = (f'<div class="sub">רשימה ראשית: {m["vip_primary_list_id"]}'
+                       + (f' · מחזקות: {", ".join(str(s) for s in sup[:4])}' if sup else "")
+                       + (f' · ייחוס-החלטה: {m["decision_primary_list_id"]}'
+                          if m.get("decision_primary_list_id") else "") + "</div>")
+        need_ln = ""
+        sc = m.get("scores") or {}
+        if sc:
+            tr, ev = sc.get("trade_readiness") or {}, sc.get("evidence_quality") or {}
+            # only actual GAPS ride "לעסקה חסר" — trigger_defined is a plus, not a gap
+            need = (", ".join(c.split(":", 1)[1] for c in tr.get("reason_codes") or []
+                              if c.startswith("missing:"))
+                    or ("טריגר מוגדר — ממתין לו" if tr.get("trigger_defined")
+                        else "אין חסמים מוגדרים"))
+            fresh = "טרי" if ev.get("latest_price_fresh") else "⚠️ לא-טרי"
+            need_ln = (f'<div class="sub">לעסקה חסר: {need} · יציאה: invalidation קשה '
+                       f'(מיידי) / נחלש &gt;3 ימים · דאטה: '
+                       f'{ev.get("valid_days", 0)}/{ev.get("total_days", 0)} ימים תקפים, '
+                       f'מחיר {fresh}</div>')
         st.markdown(
             f'<div class="papow-card"><span class="tkr">{m.get("ticker")}</span>{mag}{beh} '
             f'{k1}{k2} <span class="papow-stage">{stage}</span>'
             f'<div class="sub">בשלות {m.get("maturity")}{gate} · יום-עומק '
             f'{m.get("days_analyzed")} → תחנה {m.get("next_station")} · מקור: '
-            f'{m.get("source")}{read}</div></div>', unsafe_allow_html=True)
+            f'{m.get("source")}{read}</div>{axes_ln}{attr_ln}{need_ln}</div>',
+            unsafe_allow_html=True)
         with st.expander(f"🔬 ניתוח-העומק המלא של {m.get('ticker')}"):
             _render_memory(str(m.get("ticker")))
             _render_deep_notes(str(m.get("ticker")))
@@ -802,6 +841,10 @@ def _vip_queue_tab() -> None:
             "שלב": _STAGE_HE.get(str(m.get("status")), m.get("status")),
             "בשלות": m.get("maturity"), "חסר": m.get("missing_gate"),
             "גיל-VIP": m.get("vip_age_days"), "מקור": m.get("source"),
+            "רשימה ראשית": m.get("vip_primary_list_id") or "",
+            "מחזקות": ", ".join(str(ln0.get("list_id")) for ln0 in
+                                m.get("list_links") or []
+                                if ln0.get("role") == "supporting") or "",
             "🧲": "🧲" if m.get("magnet") else "", "🧪": m.get("thesis") or "",
             "🧩": m.get("correlative") or "", "🐣": "🐣" if m.get("young") else "",
             "🛑": f"נשבר {m.get('invalidation_level')}"
