@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import uuid
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -842,6 +842,134 @@ def _vip_tab() -> None:
     st.caption("תור-הכניסה המלא (מבשילים, מקורות, קודי-סיבה, תזות) — בטאב 🚪 תור-VIP.")
 
 
+def _idea_action(idea_id: str, action: str, notes: str = "") -> None:
+    """The owner's judgment on a trade idea — approve freezes the contract and the
+    SHADOW list activates on the next nightly; reject/return with notes. Rides
+    research_notes exactly like trade approvals; the engine reconciles idempotently."""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    nid = f"idea_action:{idea_id}:{now}"
+    payload = json.dumps({"idea_id": idea_id, "action": action, "notes": notes,
+                          "at": now, "by": "owner (board)"}, ensure_ascii=False)
+    with _engine().begin() as c:
+        c.execute(text(
+            'insert into research_notes (id, date, kind, title, content) '
+            'values (:i, :d, :k, :t, :c) on conflict (id) do nothing'),
+            {"i": nid, "d": date.today().isoformat(), "k": "idea_action",
+             "t": f"Idea {action} — {idea_id}", "c": payload})
+    _notes_of.clear()
+
+
+_IDEA_ST_HE = {"PENDING_APPROVAL": "🟡 ממתין לאישורך", "APPROVED": "🟢 מאושר ורץ",
+               "REJECTED": "⛔ נדחה", "RETURNED": "↩️ הוחזר לעריכה",
+               "REFUTED": "❌ הופרך (בתנאים שאושרו)", "CONFIRMED": "✅ אושש",
+               "EXPIRED": "⌛ פג", "DRAFT": "📝 טיוטה", "RETIRED": "⚫ הושבת"}
+
+
+def _ideas_tab() -> None:
+    """מחולל-הרעיונות — הלב של ספרינט 2: סיטואציה ← רעיונות מתחרים ← האישור שלך ←
+    רשימת-SHADOW רצה. שיקול-הדעת האנושי נכנס כאן: לאשר או להפריך רעיונות."""
+    q = _latest_note("idea_board")
+    if not q:
+        st.info("אין עדיין לוח-רעיונות — הריצה הלילית הקרובה תיצור אותו "
+                "(הפיילוט: סיטואציית מחנק-הזיכרון עם שני רעיונות מתחרים)")
+        return
+    c1, c2, c3 = st.columns(3)
+    c1.metric("🟡 ממתינים לאישורך", q.get("n_pending", 0))
+    sits = q.get("situations") or []
+    c2.metric("🎬 סיטואציות פתוחות",
+              sum(1 for s in sits if s.get("status") == "OPEN"))
+    ideas = q.get("ideas") or []
+    c3.metric("🟢 רעיונות רצים",
+              sum(1 for i in ideas if i.get("status") == "APPROVED"))
+    for s in sits:
+        st.markdown(f"### 🎬 {s.get('title_he')} "
+                    f"<span class='papow-stage'>{s.get('status')}</span>",
+                    unsafe_allow_html=True)
+        st.markdown(f"**השאלה הפתוחה:** {s.get('question_he')}")
+        st.caption(f"התגלה דרך: {s.get('discovered_via')} · נכסים: "
+                   f"{', '.join(s.get('assets') or [])} · חלון: "
+                   f"{s.get('relevance_window_days')} ימים מ-{s.get('opened_at')}")
+        for ev in (s.get("evidence") or [])[:4]:
+            st.caption(f"• {ev}")
+        group = [i for i in ideas if i.get("situation_id") == s.get("situation_id")]
+        for i in group:
+            stt = str(i.get("status"))
+            st.markdown(
+                f"#### 💡 {i.get('title_he')} "
+                f"<span class='papow-stage'>{_IDEA_ST_HE.get(stt, stt)}</span>"
+                + (f" <span class='papow-chip'>v{i.get('contract_version')} "
+                   "🔒 קפוא</span>" if i.get("frozen") else ""),
+                unsafe_allow_html=True)
+            st.markdown(f"**תזה (בת-הפרכה):** {i.get('thesis_he')}")
+            st.markdown(f"**מנגנון:** {i.get('mechanism_he')}  \n"
+                        f"**מה צפוי:** {i.get('expectation_he')}  \n"
+                        f"**טכניקה מתאימה:** {i.get('technique_he')}")
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                st.markdown("**תנאי-אישוש (מדידים):**")
+                for cl in i.get("confirmation") or []:
+                    st.caption(f"✅ {cl.get('desc_he')} `{cl.get('rule')}`")
+            with cc2:
+                st.markdown("**תנאי-הפרכה (מדידים):**")
+                for cl in i.get("refutation") or []:
+                    st.caption(f"❌ {cl.get('desc_he')} `{cl.get('rule')}`")
+            wl = i.get("watchlist") or {}
+            st.caption("**הבשלה ל-VIP:** "
+                       + " + ".join(str(c0.get("desc_he"))
+                                    for c0 in wl.get("maturation") or [])
+                       + f" · **תפוגה:** {i.get('expires_at')}"
+                       + f" · **מתחרה מול:** {', '.join(i.get('competes_with') or [])}")
+            gaps = i.get("activation_gaps") or []
+            if gaps:
+                st.warning("פערי-הפעלה (הרשימה לא תרוץ עד שיסגרו): "
+                           + " · ".join(gaps[:3]))
+            state = i.get("state") or {}
+            if state.get("last_eval"):
+                st.caption(f"קריאה אחרונה ({state.get('last_eval')}): אישוש "
+                           f"{state.get('confirmed_days', 0)} ימים · הפרכה רצופה "
+                           f"{state.get('refuted_days', 0)} ימים")
+            if stt in ("PENDING_APPROVAL", "RETURNED", "DRAFT"):
+                nts = st.text_input("הערות (לא חובה)", key=f"idea_n_{i['idea_id']}")
+                b1, b2, b3 = st.columns(3)
+                if b1.button("✅ אשר והפעל", key=f"idea_a_{i['idea_id']}"):
+                    _idea_action(i["idea_id"], "approve", nts)
+                    st.success("אושר — החוזה יוקפא (v1) והרשימה תרוץ מהלילה")
+                if b2.button("⛔ דחה", key=f"idea_r_{i['idea_id']}"):
+                    _idea_action(i["idea_id"], "reject", nts)
+                    st.info("נדחה — יתועד עם ההערות")
+                if b3.button("↩️ החזר לעריכה", key=f"idea_e_{i['idea_id']}"):
+                    _idea_action(i["idea_id"], "return", nts)
+                    st.info("הוחזר לעריכה")
+        st.divider()
+    counts = q.get("candidate_counts") or {}
+    if counts:
+        st.markdown("#### 📊 אירועי-מועמדות הלילה (מכנה אחיד לכל הרשימות)")
+        st.dataframe(pd.DataFrame([
+            {"רשימה": k, **v} for k, v in sorted(counts.items())]),
+            use_container_width=True, hide_index=True)
+        st.caption("_discovery_denominator_status=incomplete — אין להשוות המרות בין "
+                   "רשימות עד נורמליזציית candidate_event (ספרינט 2)._ ")
+    with st.expander("➕ פתח סיטואציה / הצע רעיון חדש"):
+        st.caption("נסח חופשי — המנוע (בסיוע LLM) יהפוך את זה לטיוטת-חוזה עם תנאים "
+                   "מדידים ויחזיר לאישורך. ה-LLM לא ממציא נתונים, לא מאשר ולא משנה "
+                   "חוזה פעיל.")
+        t0 = st.text_input("כותרת הסיטואציה / הרעיון")
+        q0 = st.text_area("מה קרה ומה השאלה הפתוחה? (או: התזה + מה יאשש ומה יפריך)")
+        a0 = st.text_input("טיקרים רלוונטיים (מופרדים בפסיק)")
+        if st.button("📨 שלח לניסוח-חוזה") and t0.strip() and q0.strip():
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with _engine().begin() as c:
+                c.execute(text(
+                    'insert into research_notes (id, date, kind, title, content) '
+                    'values (:i, :d, :k, :t, :c) on conflict (id) do nothing'),
+                    {"i": f"idea_intake:{now}", "d": date.today().isoformat(),
+                     "k": "idea_intake", "t": f"Idea intake — {t0[:60]}",
+                     "c": json.dumps({"title": t0, "text": q0, "tickers": a0,
+                                      "at": now}, ensure_ascii=False)})
+            _notes_of.clear()
+            st.success("נקלט — יעובד לטיוטת-חוזה ויוצג כאן לאישורך")
+
+
 def _vip_queue_tab() -> None:
     """The ENTRY queue — who is maturing toward VIP, from which lane, and why (owner
     13.07: managed separately from the deal manager)."""
@@ -1310,8 +1438,8 @@ def main() -> None:
     _ribbon()
     # order = the owner's working process (RTL: first renders rightmost): the deal
     # manager and VIP first, the entry queue beside them, context next, ops last.
-    tabs = st.tabs(["💼 עסקאות", "👑 VIP", "🚪 תור-VIP", "🦅 הובלה", "📡 רשימות",
-                    "🚦 מפעיל", "🛠 שיפורים", "📖 אוזבקי"])
+    tabs = st.tabs(["💼 עסקאות", "👑 VIP", "🚪 תור-VIP", "💡 רעיונות", "🦅 הובלה",
+                    "📡 רשימות", "🚦 מפעיל", "🛠 שיפורים", "📖 אוזבקי"])
     with tabs[0]:
         _slots_tab()
     with tabs[1]:
@@ -1319,14 +1447,16 @@ def main() -> None:
     with tabs[2]:
         _vip_queue_tab()
     with tabs[3]:
-        _leadership_tab()
+        _ideas_tab()
     with tabs[4]:
-        _watchlists_tab()
+        _leadership_tab()
     with tabs[5]:
-        _operator_tab()
+        _watchlists_tab()
     with tabs[6]:
-        _improvement_tab()
+        _operator_tab()
     with tabs[7]:
+        _improvement_tab()
+    with tabs[8]:
         _ozbeki_tab()
     _footer()
 
