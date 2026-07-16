@@ -1236,11 +1236,14 @@ def _research_theses_card() -> None:
                 f'<div class="sub">תרחיש-נגד: {d0.get("counter_he")} · מניות: '
                 f'{", ".join(r.get("tickers") or [])}</div></div>',
                 unsafe_allow_html=True)
-            c1, c2 = st.columns(2)
+            c1, c2, c3 = st.columns(3)
             if c1.button("✅ אשר — פרק לרשימות", key=f"tr_ok_{iid}"):
                 _thesis_action(iid, "approve")
-                st.success("אושר — הפירוק לסלים + ולידציית-API ירוצו בלילה")
-            if c2.button("⛔ דחה", key=f"tr_no_{iid}"):
+                st.success("אושר — הפירוק לסלים (Perplexity) + ולידציית-Massive ירוצו בלילה")
+            if c2.button("🔥 אשר כרשימה חמה", key=f"tr_hot_{iid}"):
+                _thesis_action(iid, "approve_hot")
+                st.success("אושר כ-🔥 — הרשימה תוכל למלא את מלוא הקיבולת ב-VIP")
+            if c3.button("⛔ דחה", key=f"tr_no_{iid}"):
                 _thesis_action(iid, "reject")
                 st.info("נדחה — החקירה תיסגר")
     if low:
@@ -1260,6 +1263,8 @@ def _thesis_card() -> None:
         core = s.get("core") or {}
         ew = core.get("ew_20d")
         bits = [_TH_HE.get(str(s.get("status")), s.get("status"))]
+        if s.get("hot"):
+            bits.append("🔥 רשימה-חמה (קיבולת מלאה ב-VIP)")
         if ew is not None:
             bits.append(f"EW20 {ew:+.1f}%")
         if core.get("rs_share") is not None:
