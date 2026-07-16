@@ -536,7 +536,8 @@ def _slots_tab() -> None:
                 # 3 ── the metric engine: gates
                 if row.get("gates"):
                     st.dataframe(pd.DataFrame(
-                        [{"": "🟢" if g["ok"] else "🔴", "שער": g["gate"],
+                        [{"": ("🧊" if g.get("ok") is None else
+                               "🟢" if g["ok"] else "🔴"), "שער": g["gate"],
                           "נימוק": g["why"]} for g in row["gates"]]),
                         use_container_width=True, hide_index=True)
                 # 4 ── the qualitative engine (VIP deep) — or the honest gap
@@ -749,16 +750,47 @@ def _vip_tab() -> None:
             k2 = '<span class="papow-key">🔑 איכותני · צובר</span>'
         eng = mq.get("engine")
         gate = f" · חסר: {m.get('missing_gate')}" if m.get("missing_gate") else " · מלאה"
+
+        def _conf_ln(m0: dict) -> str:
+            """Candidate-fit (contract clock) — SEPARATE from trade-readiness: the
+            audit found one '5/5' impersonating five different maturity kinds."""
+            cf = (m0.get("maturity_kinds") or {}).get("candidate_fit") or {}
+            if not cf:
+                return ""
+            out = (f' · התאמת-מועמדת: {cf.get("confirmations", "?")}/'
+                   f'{cf.get("required", 1)} אישורים')
+            if cf.get("structural_rule"):
+                out += (" · מבנה ✓" if cf.get("structural_confirmed")
+                        else f' · ממתין-למבנה ({cf["structural_rule"]})')
+            return out
         stage = _STAGE_HE.get(str(m.get("status")), m.get("status"))
         read = (f' · {rec[:110]}' if rec and rec not in ("BUY", "WAIT", "DROP") else "")
         read += f' · מנוע: {eng}' if eng else ""
         mag = ' <span class="papow-chip gold">🧲 מגנט-כסף</span>' if m.get("magnet")             else ""
+        # BOOK/DOCTRINE provenance chips (owner blocker 3, post-audit): every card
+        # says which book owns it and under which authority role it claimed
+        _bk_he = {"core": "📕 Core", "opportunistic": "📗 אופורטוניסטי",
+                  "context": "📙 Context"}
+        if m.get("book_id"):
+            mag += (f' <span class="papow-chip">{_bk_he.get(str(m["book_id"]), m["book_id"])}'
+                    + (f' · {m.get("doctrine_id")}' if m.get("doctrine_id") else "")
+                    + (f' · {m.get("authority_role")}' if m.get("authority_role")
+                       else "") + '</span>')
+        if str(m.get("book_id")) == "context":
+            mag += (' <span class="papow-chip coral">⚠️ כניסת-Context — הפרת-סמכות '
+                    '(אסור מאז ה-Audit)</span>')
+        if m.get("late_crowding"):
+            mag += ' <span class="papow-chip coral">🌡️ מתוח — עדיפות מופחתת</span>'
+        for _rf in (m.get("risk_flags") or [])[:1]:
+            mag += f' <span class="papow-chip coral">🛑 וטו-סיכון: {str(_rf)[:60]}</span>'
         if m.get("thesis"):
             mag += f' <span class="papow-chip">🧪 תזה: {m.get("thesis")}</span>'
         if m.get("correlative"):
             mag += f' <span class="papow-chip">🧩 מפגר-אשכול: {m.get("correlative")}</span>'
         if m.get("young"):
             mag += ' <span class="papow-chip">🐣 מהלך-צעיר</span>'
+        if m.get("emerging"):
+            mag += ' <span class="papow-chip">🌱 הובלה-מתהווה</span>'
         if m.get("invalidation_broken"):
             mag += (f' <span class="papow-chip coral">🛑 invalidation נשבר '
                     f'({m.get("invalidation_level")}) — אין החלטה עד ניתוח מחודש</span>')
@@ -827,7 +859,8 @@ def _vip_tab() -> None:
         st.markdown(
             f'<div class="papow-card"><span class="tkr">{m.get("ticker")}</span>{mag}{beh} '
             f'{k1}{k2} <span class="papow-stage">{stage}</span>'
-            f'<div class="sub">בשלות {m.get("maturity")}{gate} · יום-עומק '
+            f'<div class="sub">מוכנות-מסחר {m.get("maturity")}{gate}'
+            f'{_conf_ln(m)} · יום-עומק '
             f'{m.get("days_analyzed")} → תחנה {m.get("next_station")} · מקור: '
             f'{m.get("source")}{read}</div>{axes_ln}{attr_ln}{need_ln}</div>',
             unsafe_allow_html=True)
@@ -1042,9 +1075,38 @@ def _vip_queue_tab() -> None:
         st.info("אין עדיין תצלום-VIP — הריצה הלילית תייצר אותו")
         return
     cap = q.get("capacity") or {}
-    c1, c2 = st.columns(2)
+    ep0 = q.get("epoch") or {}
+    if str(ep0.get("phase") or "FORWARD") != "FORWARD":
+        st.warning(f"⚠️ פאזת-אפוק: {ep0.get('phase')} — ריצות-צל טכניות; "
+                   "האוכלוסייה ללא מעמד-מדידה עד מעבר ל-FORWARD (אחרי ה-Audit)")
+    c1, c2, c3 = st.columns(3)
     c1.metric("👑 קיבולת VIP", cap.get("vip", "—"))
     c2.metric("🔬 בניתוח-עומק", cap.get("deep", "—"))
+    c3.metric("🔏 גרסת-סמכות", str(q.get("authority_snapshot_version") or "—"))
+    # THREE funnels (owner blocker 4): Core / Opportunistic / Context-Discovery —
+    # Context must read 0 direct entries; orphans are raw material, not failures
+    fns = q.get("funnels") or {}
+    if fns:
+        fc, fo, fx = (fns.get("core") or {}, fns.get("opportunistic") or {},
+                      fns.get("context_discovery") or {})
+        b1, b2, b3 = st.columns(3)
+        b1.metric("📕 Core", f"{fc.get('active', 0)} פעילים",
+                  f"+{len(fc.get('entered_today') or [])} הלילה")
+        b2.metric("📗 אופורטוניסטי", f"{fo.get('active', 0)} פעילים",
+                  f"+{len(fo.get('entered_today') or [])} הלילה")
+        _viol = fx.get("direct_vip_entries", 0)
+        b3.metric("📙 Context/Discovery → VIP", str(_viol),
+                  "חייב-אפס" if not _viol else "⚠️ הפרה", delta_color="inverse")
+        if fx.get("violation_tickers"):
+            st.error("הפרת-סמכות: כניסות-Context ישירות — "
+                     + ", ".join(fx["violation_tickers"]))
+        orp = fx.get("orphaned_high_readiness") or []
+        if orp:
+            st.info("🧩 יתומי-בשלות-גבוהה (הוקפאו למפעל-הרעיונות, לא מושב): "
+                    + ", ".join(orp))
+        dob = fx.get("discovery_observations") or []
+        if dob:
+            st.caption("🔭 תצפיות-Discovery (young ללא קבוצה): " + ", ".join(dob))
     members = q.get("members") or []
     rest = [m for m in members if not str(m.get("status", "")).startswith(
         ("DEEP", "DECISION", "CONTINUE_DEEP"))]
@@ -1053,7 +1115,11 @@ def _vip_queue_tab() -> None:
         st.dataframe(pd.DataFrame([{
             "ticker": m.get("ticker"),
             "שלב": _STAGE_HE.get(str(m.get("status")), m.get("status")),
-            "בשלות": m.get("maturity"), "חסר": m.get("missing_gate"),
+            "מוכנות-מסחר": m.get("maturity"), "חסר": m.get("missing_gate"),
+            "אישורים": (lambda cf: f"{cf.get('confirmations', '?')}/"
+                        f"{cf.get('required', 1)}")(
+                (m.get("maturity_kinds") or {}).get("candidate_fit") or {}),
+            "ספר": m.get("book_id") or "",
             "גיל-VIP": m.get("vip_age_days"), "מקור": m.get("source"),
             "רשימה ראשית": m.get("vip_primary_list_id") or "",
             "מחזקות": ", ".join(str(ln0.get("list_id")) for ln0 in
@@ -1082,7 +1148,9 @@ def _vip_queue_tab() -> None:
         st.markdown("#### 🪜 סולם-הצנרת לסלוטים")
         st.dataframe(pd.DataFrame([{
             "state": _STATE_HE.get(r["state"], r["state"]), "ticker": r["ticker"],
-            "בשלות": r.get("maturity") or "—",
+            "מוכנות-מסחר": r.get("maturity") or "—",
+            "רשימות": ", ".join(r.get("lists") or ([r["list"]] if r.get("list")
+                                                   else [])),
             "טריות": {"fresh": "🟢 טרי", "aging": "🟡 מזדקן", "stale": "🔴 רקוב"}.get(
                 str(r.get("freshness")),
                 "—") + (f" (יום {r['signal_age_days']})"
@@ -1101,9 +1169,11 @@ def _vip_queue_tab() -> None:
                 continue
             with st.expander(f"🔍 {r['ticker']} — פירוט-שערים מלא"):
                 if r.get("gates"):
-                    st.dataframe(pd.DataFrame([{"gate": g["gate"],
-                                                "status": "🟢" if g["ok"] else "🔴",
-                                                "detail": g["why"]} for g in r["gates"]]),
+                    st.dataframe(pd.DataFrame([{
+                        "gate": g["gate"],
+                        "status": ("🧊 DATA_GAP" if g.get("ok") is None
+                                   else "🟢" if g["ok"] else "🔴"),
+                        "detail": g["why"]} for g in r["gates"]]),
                                  use_container_width=True, hide_index=True)
                 for k, v in (r.get("entry_rules") or {}).items():
                     st.markdown(f"- `{k}`: {v}")
