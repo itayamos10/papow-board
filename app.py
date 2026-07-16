@@ -1066,6 +1066,15 @@ def _vip_queue_tab() -> None:
             for m in rest]), use_container_width=True, hide_index=True)
     else:
         st.caption("אין שמות בהבשלה כרגע — התור ריק וזה נתון, לא תקלה.")
+    la = q.get("legacy_archive") or {}
+    ep = q.get("epoch") or {}
+    if la.get("n"):
+        with st.expander(f"🗄️ Legacy/Migration — {la['n']} חברי התקופה הקודמת "
+                         f"(ארכיון-עיון; אפוק נוכחי: {ep.get('epoch_id', '—')})"):
+            st.caption("סטטוסים קפואים כפי שהיו בחיתוך — לא יציאות ולא כישלונות; "
+                       "שם שיעפיל שוב ייכנס כאפיזודה חדשה עם הארכיון כרפרנס. "
+                       "אי-חזרה = 'טרם העפיל תחת הדוקטרינה החדשה', לפי חלון-המשפחה.")
+            st.caption(", ".join(la.get("tickers") or []))
     # the slot-pipeline ladder (moved from the deal manager — it's queue business)
     acct = _latest("account_snapshots") or {}
     pipe = (acct.get("slot_board") or {}).get("pipeline") or []
