@@ -900,19 +900,44 @@ def _ideas_tab() -> None:
                 + (f" <span class='papow-chip'>v{i.get('contract_version')} "
                    "🔒 קפוא</span>" if i.get("frozen") else ""),
                 unsafe_allow_html=True)
+            # COUNTER-FIRST (external research Q5: the human adds value only when he
+            # sees the weakest side, not the pitch — anti rubber-stamping)
+            st.error(f"**התרחיש הנגדי קודם:** {i.get('counter_scenario_he')}")
+            if i.get("possible_duplicate_of"):
+                st.warning(f"⚠️ כפילות-אפשרית של {i['possible_duplicate_of']} "
+                           "(חפיפת-יקום ≥50%, אותו כיוון) — ההכרעה שלך")
+            if i.get("late_entry_he"):
+                st.warning(f"⏰ המהלך כבר רץ — למה נשאר מיץ: {i['late_entry_he']}")
+            rc = i.get("replay_calibration") or {}
+            if rc:
+                st.caption(f"🔁 **Replay-כיול** ({rc.get('label')}): "
+                           f"{rc.get('n_episodes')} אפיזודות-עבר לפי כלל · "
+                           f"פגיעה-x20 {rc.get('hit_share_x20')} · חציון-עודף-20d "
+                           f"{rc.get('median_x20')} · ההפרכה תפסה מפסידים "
+                           f"{rc.get('refutation_caught_losers')}")
             st.markdown(f"**תזה (בת-הפרכה):** {i.get('thesis_he')}")
             st.markdown(f"**מנגנון:** {i.get('mechanism_he')}  \n"
                         f"**מה צפוי:** {i.get('expectation_he')}  \n"
                         f"**טכניקה מתאימה:** {i.get('technique_he')}")
+            hz = (f"הבשלה מינ' {i.get('min_maturation_days')}י · חלון-כניסה "
+                  f"{i.get('entry_window_days')}י · מימוש-צפוי "
+                  f"{i.get('expected_realization_days')}י")
+            st.caption(f"⏱️ אופק: {hz}")
             cc1, cc2 = st.columns(2)
             with cc1:
+                st.markdown("**תנאי-הפרכה (מה יוכיח שטעינו):**")
+                for cl in i.get("refutation") or []:
+                    st.caption(f"❌ {cl.get('desc_he')} `{cl.get('rule')}`")
+            with cc2:
                 st.markdown("**תנאי-אישוש (מדידים):**")
                 for cl in i.get("confirmation") or []:
                     st.caption(f"✅ {cl.get('desc_he')} `{cl.get('rule')}`")
-            with cc2:
-                st.markdown("**תנאי-הפרכה (מדידים):**")
-                for cl in i.get("refutation") or []:
-                    st.caption(f"❌ {cl.get('desc_he')} `{cl.get('rule')}`")
+            if i.get("mechanism_outcome"):
+                st.info(f"סגירה כפולה: מנגנון **{i['mechanism_outcome']}** · "
+                        f"חלון-סווינג **{i['trade_horizon_outcome']}**")
+            for ev0 in (i.get("evidence_log") or [])[-3:]:
+                st.caption(f"🧾 {ev0.get('date')} [{ev0.get('modality')}"
+                           f"{ev0.get('direction')}] {ev0.get('what_he')}")
             wl = i.get("watchlist") or {}
             st.caption("**הבשלה ל-VIP:** "
                        + " + ".join(str(c0.get("desc_he"))
