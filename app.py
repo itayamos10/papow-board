@@ -1197,8 +1197,61 @@ _BEHAV_HE = {"CROWDED_SHORT": "🩳 שורט צפוף", "EXTREME_SHORT_INTEREST"
              "RETAIL_CHASE_INTO_STRENGTH": "🎪 רדיפת-ריטייל"}
 
 
+def _thesis_action(investigation_id: str, action: str) -> None:
+    """The owner's judgment on a RESEARCH thesis (the standing method, 16.07):
+    approve -> the engine decomposes it into validated baskets and lands it in
+    theses.json (DORMANT; wake gates decide activation). Idempotent notes."""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    payload = json.dumps({"investigation_id": investigation_id, "action": action,
+                          "at": now, "by": "owner (board)"}, ensure_ascii=False)
+    with _engine().begin() as c:
+        c.execute(text(
+            'insert into research_notes (id, date, kind, title, content) '
+            'values (:i, :d, :k, :t, :c) on conflict (id) do nothing'),
+            {"i": f"thesis_action:{investigation_id}:{now}",
+             "d": date.today().isoformat(), "k": "thesis_action",
+             "t": f"Thesis research {action} — {investigation_id}", "c": payload})
+    _notes_of.clear()
+
+
+def _research_theses_card() -> None:
+    """Graded research theses (median-of-3 minus 1) — only 8+ reach this card."""
+    tr = _latest_note("thesis_research")
+    if not tr:
+        return
+    pend = [r for r in tr.get("results") or [] if r.get("escalated")]
+    low = [r for r in tr.get("results") or [] if not r.get("escalated")]
+    if pend:
+        st.markdown("#### 🔬 תזות-מחקר בדירוג 8+ — ממתינות לשיפוטך")
+        for r in pend:
+            d0 = r.get("draft") or {}
+            iid = str(r.get("investigation_id"))
+            st.markdown(
+                f'<div class="papow-card"><span class="tkr">{d0.get("title_he")}'
+                f'</span> <span class="papow-chip gold">דירוג {r.get("final_grade")}'
+                f' (חציון {r.get("grades")} −1)</span>'
+                f'<div class="sub">מנגנון: {d0.get("mechanism_he")}</div>'
+                f'<div class="sub">אישוש: {d0.get("confirmation_he")} · '
+                f'הפרכה: {d0.get("refutation_he")}</div>'
+                f'<div class="sub">תרחיש-נגד: {d0.get("counter_he")} · מניות: '
+                f'{", ".join(r.get("tickers") or [])}</div></div>',
+                unsafe_allow_html=True)
+            c1, c2 = st.columns(2)
+            if c1.button("✅ אשר — פרק לרשימות", key=f"tr_ok_{iid}"):
+                _thesis_action(iid, "approve")
+                st.success("אושר — הפירוק לסלים + ולידציית-API ירוצו בלילה")
+            if c2.button("⛔ דחה", key=f"tr_no_{iid}"):
+                _thesis_action(iid, "reject")
+                st.info("נדחה — החקירה תיסגר")
+    if low:
+        st.caption("🔬 תזות-מחקר מתחת לרף-8 (נשארות ברשומה): "
+                   + " · ".join(f"{(r.get('draft') or {}).get('title_he', '?')} "
+                                f"({r.get('final_grade')})" for r in low))
+
+
 def _thesis_card() -> None:
     """The research-thesis pipeline — the SECOND VIP entry lane, its own gates."""
+    _research_theses_card()             # the owner's 8+ approval queue rides on top
     tw = _latest_note("thesis_watch")
     if not tw:
         return
