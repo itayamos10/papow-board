@@ -873,14 +873,53 @@ def _ideas_tab() -> None:
         st.info("אין עדיין לוח-רעיונות — הריצה הלילית הקרובה תיצור אותו "
                 "(הפיילוט: סיטואציית מחנק-הזיכרון עם שני רעיונות מתחרים)")
         return
-    c1, c2, c3 = st.columns(3)
-    c1.metric("🟡 ממתינים לאישורך", q.get("n_pending", 0))
+    # THE LOGICAL PIPELINE STRIP: source -> situation -> ideas -> review -> approval
+    # -> SHADOW runtime -> VIP feed — the factory at a glance
     sits = q.get("situations") or []
-    c2.metric("🎬 סיטואציות פתוחות",
-              sum(1 for s in sits if s.get("status") == "OPEN"))
     ideas = q.get("ideas") or []
-    c3.metric("🟢 רעיונות רצים",
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("🎬 סיטואציות פתוחות",
+              sum(1 for s in sits if s.get("status") == "OPEN"))
+    c2.metric("🟡 ממתינים לאישורך", q.get("n_pending", 0))
+    c3.metric("🟢 רשימות-SHADOW רצות",
               sum(1 for i in ideas if i.get("status") == "APPROVED"))
+    c4.metric("📦 במלאי (לא הוצג)",
+              sum(1 for i in ideas if i.get("status") == "BACKLOG_UNPRESENTED"))
+    c5.metric("📊 אירועי-מועמדות הלילה",
+              sum(sum(v.values()) for v in (q.get("candidate_counts") or {}).values()))
+    rep = q.get("scout_report") or {}
+    if rep:
+        st.caption("🛰️ **דוח-הסקאוט** (" + str(rep.get("date")) + "): נסרקו "
+                   + ", ".join(rep.get("scanned") or []) + " · ירו: "
+                   + (", ".join(f0.get("detector", "") for f0 in
+                                rep.get("fired") or []) or "—")
+                   + " · בלי-קלט: " + (", ".join(rep.get("no_input") or []) or "—")
+                   + (" · 🔕 GUARD פעיל (≥4 ממתינים)"
+                      if rep.get("pending_guard_active") else ""))
+    kw = q.get("kill_watch") or {}
+    for iid, k in kw.items():
+        line = (f"🔪 **מעקב-Kill {iid}** (v{k.get('contract_version')}, "
+                f"{k.get('kill_status')}): ")
+        if k.get("n_closed"):
+            lc = (k.get("loser_catch_by_day") or {}).get("d10") or {}
+            line += (f"{k['n_closed']} אפיזודות-forward סגורות · תפיסת-מפסידים d10: "
+                     f"v1 {lc.get('v1')} מול v2 {lc.get('v2')} · פגיעת-מנצחים: "
+                     f"v1 {(k.get('winner_kill') or {}).get('v1')} מול v2 "
+                     f"{(k.get('winner_kill') or {}).get('v2')}")
+        else:
+            line += "אפס אפיזודות-forward סגורות עדיין — המדידה הכפולה נבנית"
+        st.caption(line)
+    an = _latest_note("idea_analysis")
+    if an and an.get("events"):
+        with st.expander(f"📡 אירועי-ניתוח אחרונים ({an.get('date')}) — "
+                         f"{len(an['events'])}"):
+            for a1 in an["events"][:8]:
+                icon = "🔴" if a1.get("severity") == "high" else "🔵"
+                st.markdown(f"{icon} **{a1.get('kind')}** · {a1.get('title_he')}")
+                st.caption(f"רעיון: {a1.get('idea_change_he')}  \n"
+                           f"יקום: {a1.get('universe_change_he')}  \n"
+                           f"רשימה: {a1.get('watchlist_action_he')}  \n"
+                           f"עסקה: {a1.get('trade_implication_he')}")
     for s in sits:
         st.markdown(f"### 🎬 {s.get('title_he')} "
                     f"<span class='papow-stage'>{s.get('status')}</span>",
