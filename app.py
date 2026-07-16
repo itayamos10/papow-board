@@ -1250,6 +1250,19 @@ def _research_theses_card() -> None:
         st.caption("🔬 תזות-מחקר מתחת לרף-8 (נשארות ברשומה): "
                    + " · ".join(f"{(r.get('draft') or {}).get('title_he', '?')} "
                                 f"({r.get('final_grade')})" for r in low))
+    queue = tr.get("queue") or []
+    if queue:
+        _q_he = {"OPEN": "🔎 פתוחה", "RESEARCHED": "📄 נחקרה",
+                 "PROMOTED_TO_THESIS": "✅ הפכה לתזה", "CLOSED": "⚫ נסגרה"}
+        with st.expander(f"🗂️ תור-החקירות ({sum(1 for i in queue if i.get('status') == 'OPEN')} פתוחות"
+                         f" מתוך {len(queue)})"):
+            for i in queue:
+                st.caption(f"{_q_he.get(str(i.get('status')), i.get('status'))} · "
+                           f"{i.get('cluster_key')} "
+                           f"[{', '.join(i.get('tickers') or [])}] · "
+                           f"{i.get('question')}"
+                           + (f" · דירוג {i.get('final_grade')}"
+                              if i.get("final_grade") is not None else ""))
 
 
 def _thesis_card() -> None:
