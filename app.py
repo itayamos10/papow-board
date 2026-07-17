@@ -1646,10 +1646,43 @@ def _ozbeki_tab() -> None:
         st.caption("עוד לא הודבקו סקירות.")
 
 
+def _decision_strip() -> None:
+    """🎯 the ONE strip the owner reads first (17.07 UX): everything that awaits
+    HIS judgment, aggregated across tabs — the operator-system contract."""
+    items: list[str] = []
+    try:
+        tr = _latest_note("thesis_research") or {}
+        n_th = sum(1 for r in tr.get("results") or []
+                   if r.get("escalated")
+                   and str(r.get("owner_decision") or "PENDING") == "PENDING")
+        if n_th:
+            items.append(f"🧪 {n_th} תזות-מחקר 8+ (טאב-הובלה)")
+        n_open = sum(1 for i in tr.get("queue") or [] if i.get("status") == "OPEN")
+        if n_open:
+            items.append(f"🔎 {n_open} חקירות פתוחות")
+        ib = _latest_note("idea_board") or {}
+        if ib.get("n_pending"):
+            items.append(f"💡 {ib['n_pending']} רעיונות לאישור (טאב-רעיונות)")
+        vb = _latest_note("vip_board") or {}
+        fx = (vb.get("funnels") or {}).get("context_discovery") or {}
+        if fx.get("direct_vip_entries"):
+            items.append(f"🚨 {fx['direct_vip_entries']} הפרות-סמכות!")
+        n_appr = len(vb.get("decisions") or [])
+        if n_appr:
+            items.append(f"💥 {n_appr} החלטות-VIP הלילה (טאב-VIP)")
+    except Exception:                                     # noqa: BLE001 — strip is additive
+        return
+    if items:
+        st.info("🎯 **ממתין להחלטתך:** " + " · ".join(items))
+    else:
+        st.caption("🎯 אין החלטות פתוחות — המערכת רצה לבד ✅")
+
+
 def main() -> None:
     _gate()
     _hero()
     _ribbon()
+    _decision_strip()
     # order = the owner's working process (RTL: first renders rightmost): the deal
     # manager and VIP first, the entry queue beside them, context next, ops last.
     tabs = st.tabs(["💼 עסקאות", "👑 VIP", "🚪 תור-VIP", "💡 רעיונות", "🦅 הובלה",
