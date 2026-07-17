@@ -1250,6 +1250,21 @@ def _research_theses_card() -> None:
         st.caption("🔬 תזות-מחקר מתחת לרף-8 (נשארות ברשומה): "
                    + " · ".join(f"{(r.get('draft') or {}).get('title_he', '?')} "
                                 f"({r.get('final_grade')})" for r in low))
+    es = _latest_note("early_signals") or {}
+    if es.get("fired") or es.get("pilot"):
+        pl = es.get("pilot") or {}
+        with st.expander(f"🌱 אותות-מוקדמים (פיילוט-SHADOW) — {len(es.get('fired') or [])} "
+                         f"ירי · ריצות {pl.get('runs', 0)}"):
+            st.caption("גילוי-מוקדם: אותות חלשים/חוזרים שמצטברים לפני מהלך. "
+                       "לעולם לא תובע VIP — רק סיטואציה/חקירה/תצפית. "
+                       f"מדד-ראשי: רווח-זמן מול הזיהוי הישן "
+                       f"(חציון: {pl.get('median_lead_time_gain', '—')}).")
+            for f in (es.get("fired") or [])[:8]:
+                st.caption(f"**{f.get('key')}** · משפחות: "
+                           f"{', '.join((f.get('families') or {}))} · "
+                           f"{f.get('routed_to')}"
+                           + (f" → {f.get('routing_id')}"
+                              if f.get("routing_id") else ""))
     queue = tr.get("queue") or []
     if queue:
         _q_he = {"OPEN": "🔎 פתוחה", "RESEARCHED": "📄 נחקרה",
