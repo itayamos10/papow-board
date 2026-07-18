@@ -155,6 +155,9 @@ APP_PASSWORD = "your-password-here"'''
 def _gate() -> bool:
     if st.session_state.get("auth_ok"):
         return True
+    if _secret("LOCAL_DEV_NO_AUTH") == "yes":     # local UX-testing only — this
+        st.session_state["auth_ok"] = True        # key never exists in the cloud
+        return True
     st.markdown(_CSS, unsafe_allow_html=True)
     st.markdown('<div dir="ltr">' + _logo_html(40)
                 + '<div class="papow-tag">watch. <span class="hit">aim.</span> PapoW'
@@ -349,7 +352,8 @@ _ICON = {"filled": "📈", "research": "🔬", "ready": "🟢"}
 
 def _accrual() -> None:
     parts = [f"{n}: {c}d (last {d})" for n, c, d in _counts()]
-    st.caption("🛰️ accrual [Supabase] · " + " · ".join(parts))
+    with st.expander("🛠 רעננות-נתונים (טכני)"):
+        st.caption("🛰️ accrual [Supabase] · " + " · ".join(parts))
     newest = max((d for _, c, d in _counts() if c and d != "—"), default=None)
     if newest:
         age = (date.today() - date.fromisoformat(newest)).days
@@ -447,12 +451,12 @@ def _slots_tab() -> None:
         return
     d = _latest("forward_desk_snapshots") or {}
     r0, c0 = d.get("readiness") or {}, d.get("calibration") or {}
-    verdict = "🟢 מותר לקנות" if r0.get("verdict") == "buy_now" else "🟠 ממתינים"
     hr = "—" if c0.get("hit_rate") is None else f"{c0['hit_rate']:.0%}"
-    st.markdown(f'<div class="papow-card"><b>שוער-הפריסה:</b> {verdict} · '
-                f'קריאות מדורגות: {c0.get("n", 0)} · דיוק: {hr}'
-                f'<div class="sub">{r0.get("reason", "")} — סלוט פנוי נשאר מזומן עד '
-                f'שהדסק מכויל; הון נפרס רק כשהוא הרוויח את הזכות.</div></div>',
+    st.markdown(f'<div class="papow-card"><b>🧪 כיול-תחזיות (מחקר, לא שער-קנייה):</b> '
+                f'{c0.get("n", 0)} תחזיות-כיוון נבדקו · דיוק {hr}'
+                f'<div class="sub">מודד את חדות-הקריאות שלנו לאורך זמן. קניות-הנייר '
+                f'עוברות דרך מפתח-כפול (בדיקת-עומק + אישור-מטרי) ווטו-משטר — לא דרך '
+                f'המספר הזה. סלוט "🟢 מוכן" = יש מקום פנוי, לא המלצה לקנות.</div></div>',
                 unsafe_allow_html=True)
     with st.expander("🧭 מנוע-הקצב המלא (Deal Desk)"):
         _desk_tab()
@@ -669,6 +673,8 @@ def _slots_tab() -> None:
 
 
 _STAGE_HE = {"VIP_MATURING": "מבשילה", "VIP_READY_FOR_DEEP_ANALYSIS": "מוכנה לעומק",
+             "DEEP_ANALYSIS_DAY_1": "עומק — יום 1", "DEEP_ANALYSIS_DAY_2": "עומק — יום 2",
+             "DEEP_ANALYSIS_DAY_3": "עומק — יום 3", "DECISION_READY": "בשלה להחלטה",
              "DECISION_READY": "בנקודת-החלטה", "SHADOW_BUY": "BUY-צל 💥",
              "CONTINUE_DEEP_ANALYSIS": "ממתינה לטריגר", "CONTINUE_WATCH": "במעקב",
              "DROPPED_FROM_DEEP_ANALYSIS": "ירדה מעומק", "DROPPED_FROM_VIP": "יצאה"}
@@ -695,12 +701,19 @@ def _render_deep_notes(ticker: str, n: int = 2) -> None:
             rows = c.execute(text(
                 "select date, title, content from research_notes where kind = 'vip' "
                 "and title like :t order by date desc limit :n"),
-                {"t": f"%{ticker}%", "n": n}).fetchall()
+                {"t": f"%— {ticker} (%", "n": n}).fetchall()
     except Exception:
         rows = []
     if not rows:
         st.caption("אין עדיין ניתוח שמור לשם הזה (נשמר בכל לילה-עומק).")
     for _dt, title, content in rows:
+        if f"— {ticker} (" not in str(title):
+            continue                              # never show another name's analysis
+        bad = ("איננה קיימת" in str(content) or "אינה קיימת" in str(content))
+        if bad:
+            st.warning("⚠️ ניתוח-הלילה נפסל בבקרת-איכות (המנוע התייחס לנתונים לא "
+                       "תואמים) — יופק מחדש בריצה הבאה. לא מסתמכים עליו.")
+            continue
         st.markdown(f"**{title}**")
         try:
             day = json.loads(content)
@@ -719,6 +732,10 @@ def _render_deep_notes(ticker: str, n: int = 2) -> None:
 
 
 def _vip_tab() -> None:
+    st.caption("👑 **מה זה המסך הזה:** חדר-הבדיקה. המניות שכבר הבשילו מקבלות "
+               "כאן ניתוח-עומק יומי, ובתחנות קבועות נופלת החלטת-צל (קנייה-על-נייר/"
+               "המתנה/דחייה). קריאה בלבד — אין כאן כפתורי פעולה.  \n"
+               "**המסלול המלא:** 📡 רשימות ← 🚪 תור ← 👑 בדיקת-עומק (כאן) ← 💼 סלוט")
     q = _latest_note("vip_board")
     if not q:
         st.info("אין עדיין תצלום-VIP — הריצה הלילית תייצר אותו")
@@ -898,9 +915,15 @@ _IDEA_ST_HE = {"PENDING_APPROVAL": "🟡 ממתין לאישורך", "APPROVED":
                "EXPIRED": "⌛ פג", "DRAFT": "📝 טיוטה", "RETIRED": "⚫ הושבת"}
 
 
+def _ideas_intro() -> None:
+    st.caption("💡 **מה זה המסך הזה:** רעיונות-ניסוי — כמה פרשנויות מתחרות לאותה "
+               "תופעה בשוק, שנמדדות זו מול זו על נתונים אמיתיים. רעיון שמנצח "
+               "במדידה הופך לגרעין קבוע (לשונית «גרעינים»); רעיון שמופרך נסגר "
+               "בכבוד עם כל הלקחים. אתה מאשר/דוחה כל רעיון לפני שהוא רץ.")
+
+
 def _ideas_tab() -> None:
-    """מחולל-הרעיונות — הלב של ספרינט 2: סיטואציה ← רעיונות מתחרים ← האישור שלך ←
-    רשימת-SHADOW רצה. שיקול-הדעת האנושי נכנס כאן: לאשר או להפריך רעיונות."""
+    _ideas_intro()
     q = _latest_note("idea_board")
     if not q:
         st.info("אין עדיין לוח-רעיונות — הריצה הלילית הקרובה תיצור אותו "
@@ -913,7 +936,9 @@ def _ideas_tab() -> None:
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("🎬 סיטואציות פתוחות",
               sum(1 for s in sits if s.get("status") == "OPEN"))
-    c2.metric("🟡 ממתינים לאישורך", q.get("n_pending", 0))
+    c2.metric("🟡 ממתינים לאישורך",
+              sum(1 for i in ideas
+                  if str(i.get("status")) in ("DRAFT", "PENDING_APPROVAL")))
     c3.metric("🟢 רשימות-SHADOW רצות",
               sum(1 for i in ideas if i.get("status") == "APPROVED"))
     c4.metric("📦 במלאי (לא הוצג)",
@@ -923,7 +948,7 @@ def _ideas_tab() -> None:
     rep = q.get("scout_report") or {}
     if rep:
         st.caption("🛰️ **דוח-הסקאוט** (" + str(rep.get("date")) + "): נסרקו "
-                   + ", ".join(rep.get("scanned") or []) + " · ירו: "
+                   + ", ".join(rep.get("scanned") or []) + " · זיהו: "
                    + (", ".join(f0.get("detector", "") for f0 in
                                 rep.get("fired") or []) or "—")
                    + " · בלי-קלט: " + (", ".join(rep.get("no_input") or []) or "—")
@@ -931,8 +956,8 @@ def _ideas_tab() -> None:
                       if rep.get("pending_guard_active") else ""))
     kw = q.get("kill_watch") or {}
     for iid, k in kw.items():
-        line = (f"🔪 **מעקב-Kill {iid}** (v{k.get('contract_version')}, "
-                f"{k.get('kill_status')}): ")
+        line = (f"⚖️ **מבחן גרסה-מול-גרסה {iid}** "
+                f"(v{k.get('contract_version')}) — איזו גרסת-כללים חוזה טוב יותר: ")
         if k.get("n_closed"):
             lc = (k.get("loser_catch_by_day") or {}).get("d10") or {}
             line += (f"{k['n_closed']} אפיזודות-forward סגורות · תפיסת-מפסידים d10: "
@@ -940,7 +965,7 @@ def _ideas_tab() -> None:
                      f"v1 {(k.get('winner_kill') or {}).get('v1')} מול v2 "
                      f"{(k.get('winner_kill') or {}).get('v2')}")
         else:
-            line += "אפס אפיזודות-forward סגורות עדיין — המדידה הכפולה נבנית"
+            line += "עוד אין עסקאות סגורות למדידה — ההשוואה תתמלא עם הזמן"
         st.caption(line)
     an = _latest_note("idea_analysis")
     if an and an.get("events"):
@@ -954,8 +979,12 @@ def _ideas_tab() -> None:
                            f"רשימה: {a1.get('watchlist_action_he')}  \n"
                            f"עסקה: {a1.get('trade_implication_he')}")
     for s in sits:
-        st.markdown(f"### 🎬 {s.get('title_he')} "
-                    f"<span class='papow-stage'>{s.get('status')}</span>",
+        s_title = (s.get("title_he") or s.get("question_he")
+                   or ", ".join(s.get("assets") or []) or s.get("situation_id"))
+        _sit_he = {"OPEN": "🟢 פתוחה", "CLOSED": "⚫ סגורה", "EXPIRED": "⌛ פגה"}
+        _sit = str(s.get("status") or "OPEN")
+        st.markdown(f"### 🎬 {s_title} "
+                    f"<span class='papow-stage'>{_sit_he.get(_sit, _sit)}</span>",
                     unsafe_allow_html=True)
         st.markdown(f"**השאלה הפתוחה:** {s.get('question_he')}")
         st.caption(f"התגלה דרך: {s.get('discovered_via')} · נכסים: "
@@ -967,10 +996,11 @@ def _ideas_tab() -> None:
         for i in group:
             stt = str(i.get("status"))
             st.markdown(
-                f"#### 💡 {i.get('title_he')} "
+                f"#### 💡 {i.get('title_he') or i.get('idea_id')} "
                 f"<span class='papow-stage'>{_IDEA_ST_HE.get(stt, stt)}</span>"
                 + (f" <span class='papow-chip'>v{i.get('contract_version')} "
-                   "🔒 קפוא</span>" if i.get("frozen") else ""),
+                   "🔒 חוזה נעול — התנאים לא משתנים בדיעבד</span>"
+                   if i.get("frozen") else ""),
                 unsafe_allow_html=True)
             # COUNTER-FIRST (external research Q5: the human adds value only when he
             # sees the weakest side, not the pitch — anti rubber-stamping)
@@ -1044,8 +1074,8 @@ def _ideas_tab() -> None:
         st.dataframe(pd.DataFrame([
             {"רשימה": k, **v} for k, v in sorted(counts.items())]),
             use_container_width=True, hide_index=True)
-        st.caption("_discovery_denominator_status=incomplete — אין להשוות המרות בין "
-                   "רשימות עד נורמליזציית candidate_event (ספרינט 2)._ ")
+        st.caption("⚠️ עדיין אי-אפשר להשוות המרות בין רשימות — שיטת-הספירה "
+                   "טרם אוחדה לכולן (עבודה עתידית).")
     with st.expander("➕ פתח סיטואציה / הצע רעיון חדש"):
         st.caption("נסח חופשי — המנוע (בסיוע LLM) יהפוך את זה לטיוטת-חוזה עם תנאים "
                    "מדידים ויחזיר לאישורך. ה-LLM לא ממציא נתונים, לא מאשר ולא משנה "
@@ -1070,6 +1100,10 @@ def _ideas_tab() -> None:
 def _vip_queue_tab() -> None:
     """The ENTRY queue — who is maturing toward VIP, from which lane, and why (owner
     13.07: managed separately from the deal manager)."""
+    st.caption("🚪 **מה זה המסך הזה:** חדר-ההמתנה. מניות שהועמדו ע\"י רשימה "
+               "מוסמכת מבשילות כאן לפי שעון משלהן, ורק אחר-כך נכנסות לבדיקת-"
+               "העומק. צפייה בלבד.  \n"
+               "**המסלול המלא:** 📡 רשימות ← 🚪 תור (כאן) ← 👑 בדיקת-עומק ← 💼 סלוט")
     q = _latest_note("vip_board")
     if not q:
         st.info("אין עדיין תצלום-VIP — הריצה הלילית תייצר אותו")
@@ -1102,11 +1136,14 @@ def _vip_queue_tab() -> None:
                      + ", ".join(fx["violation_tickers"]))
         orp = fx.get("orphaned_high_readiness") or []
         if orp:
-            st.info("🧩 יתומי-בשלות-גבוהה (הוקפאו למפעל-הרעיונות, לא מושב): "
+            st.info("🧩 מניות חזקות בלי רשימה אחראית (נשלחו לחקר, לא לתור): "
                     + ", ".join(orp))
+            st.caption("מניה שעברה את ספי-המסחר אבל אף רעיון/רשימה מוסמכת לא "
+                       "מסבירה אותה — לא נכנסת לתור, אלא נשלחת ללשונית-הגרעינים "
+                       "כחומר-גלם לרעיון חדש. שום מידע לא נזרק.")
         dob = fx.get("discovery_observations") or []
         if dob:
-            st.caption("🔭 תצפיות-Discovery (young ללא קבוצה): " + ", ".join(dob))
+            st.caption("🔭 מהלכים צעירים בלי קבוצה (במעקב בלבד): " + ", ".join(dob))
     members = q.get("members") or []
     rest = [m for m in members if not str(m.get("status", "")).startswith(
         ("DEEP", "DECISION", "CONTINUE_DEEP"))]
@@ -1179,13 +1216,45 @@ def _vip_queue_tab() -> None:
                     st.markdown(f"- `{k}`: {v}")
                 if r.get("prior"):
                     st.caption(f"prior (in-sample): {r['prior']}")
-    _thesis_card()                      # theses ARE an entry lane — they live here
+    st.caption("🧬 הגרעינים (התזות) עברו ללשונית משלהם — «גרעינים» — שם רואים כל רעיון, הסל שלו ומצב-ההתעוררות.")
     ev = q.get("events_today") or []
+    _CODE_HE = {
+        "orphaned_high_readiness": "מוכנה-לסחר אבל בלי רשימה אחראית — נשלחה לחקר",
+        "discovery_observation": "מהלך צעיר בלי קבוצה — מעקב בלבד",
+        "orphan_superseded": "נמצאה לה רשימה אחראית באותו לילה",
+        "list_cap_full": "הרשימה מלאה — ממתינה לתור",
+        "family_cap_full": "משפחת-הליבה מלאה (3) — ממתינה",
+        "late_crowding_routed": "מתוחה — נותבה למסלול-הנסיגה במקום רדיפה",
+        "late_crowding_needs_full": "מתוחה — נדרשת מוכנות מלאה",
+        "veto_blocked_entry": "אזהרת-עייפות חסמה כניסה",
+        "claim_denied": "הרשימה לא מוסמכת להכניס — נרשם בלבד",
+        "vip_entered": "נכנסה לתור-הבדיקה",
+        "vip_exited": "יצאה (תנאי-הרשימה נשברו)",
+        "degraded_start": "התנאים נחלשו — בהשגחה, בלי קניות חדשות",
+        "degraded_recovered": "התנאים חזרו — ההשגחה הוסרה",
+        "reserved_seat": "קיבלה עדיפות-תור (מושב שמור)",
+        "priority": "נכנסה לבדיקת-עומק",
+        "queue_full": "מוכנה אבל אין מקום בעומק — ממתינה",
+        "structural_confirmed": "המבנה אושר (נסיגה+חזרה שהחזיקה)",
+        "risk_flag": "אזהרת-עייפות פעילה — בלי קניות",
+        "decision_blocked": "ההחלטה נחסמה (ראה פירוט)",
+    }
+    _INTERNAL = ("admin_repair", "migration_over_cap", "epoch_cutover",
+                 "link_added", "re_entered_after_exit", "data_hold_start",
+                 "data_hold_resolved")
     if ev:
-        with st.expander(f"🧾 reason codes של הלילה ({len(ev)})"):
-            for e in ev:
-                st.caption(f"{e.get('ticker')} · {e.get('reason_code')} — "
-                           f"{e.get('detail')}")
+        vis = [e for e in ev if e.get("reason_code") not in _INTERNAL]
+        tech = [e for e in ev if e.get("reason_code") in _INTERNAL]
+        with st.expander(f"🧾 מה קרה הלילה, שורה-שורה ({len(vis)})"):
+            for e in vis:
+                he = _CODE_HE.get(str(e.get("reason_code")), e.get("reason_code"))
+                st.caption(f"**{e.get('ticker')}** · {he}  \n"
+                           f"<span style='opacity:.55;font-size:.8em'>"
+                           f"{str(e.get('detail'))[:110]}</span>",
+                           unsafe_allow_html=True)
+            if tech:
+                st.caption(f"🛠 +{len(tech)} רישומים טכניים (תחזוקה פנימית) — "
+                           "ביומן-המערכת, לא רלוונטיים להחלטות")
 
 
 _TH_HE = {"DORMANT": "🛌 רדומה", "WARMING": "🌡️ מתחממת", "AWAKE": "🚨 ערה"}
@@ -1253,8 +1322,9 @@ def _research_theses_card() -> None:
     es = _latest_note("early_signals") or {}
     if es.get("fired") or es.get("pilot"):
         pl = es.get("pilot") or {}
-        with st.expander(f"🌱 אותות-מוקדמים (פיילוט-SHADOW) — {len(es.get('fired') or [])} "
-                         f"ירי · ריצות {pl.get('runs', 0)}"):
+        with st.expander(f"🌱 אותות-מוקדמים (פיילוט-SHADOW) — "
+                         f"{len(es.get('fired') or [])} זיהויים · "
+                         f"{pl.get('runs', 0)} ריצות"):
             st.caption("גילוי-מוקדם: אותות חלשים/חוזרים שמצטברים לפני מהלך. "
                        "לעולם לא תובע VIP — רק סיטואציה/חקירה/תצפית. "
                        f"מדד-ראשי: רווח-זמן מול הזיהוי הישן "
@@ -1265,24 +1335,10 @@ def _research_theses_card() -> None:
                            f"{f.get('routed_to')}"
                            + (f" → {f.get('routing_id')}"
                               if f.get("routing_id") else ""))
-    queue = tr.get("queue") or []
-    if queue:
-        _q_he = {"OPEN": "🔎 פתוחה", "RESEARCHED": "📄 נחקרה",
-                 "PROMOTED_TO_THESIS": "✅ הפכה לתזה", "CLOSED": "⚫ נסגרה"}
-        with st.expander(f"🗂️ תור-החקירות ({sum(1 for i in queue if i.get('status') == 'OPEN')} פתוחות"
-                         f" מתוך {len(queue)})"):
-            for i in queue:
-                st.caption(f"{_q_he.get(str(i.get('status')), i.get('status'))} · "
-                           f"{i.get('cluster_key')} "
-                           f"[{', '.join(i.get('tickers') or [])}] · "
-                           f"{i.get('question')}"
-                           + (f" · דירוג {i.get('final_grade')}"
-                              if i.get("final_grade") is not None else ""))
 
 
 def _thesis_card() -> None:
     """The research-thesis pipeline — the SECOND VIP entry lane, its own gates."""
-    _research_theses_card()             # the owner's 8+ approval queue rides on top
     tw = _latest_note("thesis_watch")
     if not tw:
         return
@@ -1321,6 +1377,112 @@ def _thesis_card() -> None:
                "ב-WATCHLISTS. שערי-הכניסה של תזה הם תנאי-ההתעוררות שלה — לא חמשת שערי-"
                "הצינור הרגיל. הפיד האיכותני: כותרות שנוגעות בפרופיל-החדשות של התזה — "
                "ראיה לרלוונטיות, לא שער.")
+
+
+def _nuclei_tab() -> None:
+    """🧬 the nucleus screen — the owner's model: a trade idea is a NUCLEUS that a
+    group of stocks orbits; when the idea starts expressing in the group's actual
+    movement, it has matured and its strongest names go to VIP for examination.
+    Written for a reader who knows NONE of the system's jargon."""
+    st.markdown("### 🧬 גרעיני-מסחר — הרעיונות שמאחורי קבוצות של מניות")
+    st.caption("כל כרטיס כאן הוא **רעיון אחד** (\"גרעין\") וסביבו סל-מניות שזז יחד "
+               "בגללו. כשהרעיון מתחיל להתבטא בתנועה אמיתית של הסל — הוא \"מתעורר\", "
+               "והמניות החזקות בו נשלחות לבדיקת-עומק (VIP). "
+               "שום דבר כאן לא קונה לבד — הכל המלצת-מעקב.")
+    # -- decisions that belong to nuclei: new researched theses awaiting the owner
+    _research_theses_card()
+    # -- the factory funnel: where NEW nuclei come from, one line, plain words
+    tr = _latest_note("thesis_research") or {}
+    vb = _latest_note("vip_board") or {}
+    fx = (vb.get("funnels") or {}).get("context_discovery") or {}
+    n_orph = len(fx.get("orphaned_high_readiness") or [])
+    n_obs = len(fx.get("discovery_observations") or [])
+    queue = tr.get("queue") or []
+    n_open = sum(1 for i in queue if i.get("status") == "OPEN")
+    n_wait = sum(1 for r in tr.get("results") or []
+                 if r.get("escalated")
+                 and str(r.get("owner_decision") or "PENDING") == "PENDING")
+    st.markdown("#### 🏭 מאיפה מגיע גרעין חדש")
+    st.info(f"מניות חזקות בלי רעיון שמסביר אותן: **{n_orph + n_obs}** ← "
+            f"קבוצות שנחקרות עכשיו: **{n_open}** ← "
+            f"רעיונות שקיבלו ציון גבוה ומחכים לאישורך: **{n_wait}**")
+    st.caption("המערכת אוספת כל לילה מניות שעברו את ספי-המסחר אבל אף רעיון קיים לא "
+               "מסביר אותן; כשכמה כאלה זזות יחד — נפתחת חקירה; חקירה שמנוסחת לרעיון "
+               "משכנע (ציון 8 ומעלה אחרי הנחת-ספק) מגיעה אליך לאישור. אישרת — נולד "
+               "גרעין חדש עם סל-מעקב, והוא מופיע למטה.")
+    if queue:
+        with st.expander(f"🔎 מה נחקר עכשיו ({n_open} חקירות פתוחות)"):
+            _q_he2 = {"OPEN": "🔎 בחקירה", "RESEARCHED": "📄 נוסחה — מתחת לציון",
+                      "PARKED_SIGNAL_WATCH": "⏸️ בהמתנה (3 ניסיונות לא צלחו)",
+                      "PROMOTED_TO_THESIS": "✅ הפכה לגרעין", "CLOSED": "⚫ נסגרה"}
+            for i in queue:
+                st.caption(f"{_q_he2.get(str(i.get('status')), i.get('status'))} · "
+                           f"**{i.get('cluster_key')}** "
+                           f"[{', '.join((i.get('tickers') or [])[:6])}]"
+                           + (f" · ציון אחרון {i.get('final_grade')}"
+                              if i.get("final_grade") is not None else ""))
+                if i.get("question"):
+                    st.caption(f"    ❓ {i['question']}")
+    # -- the nucleus cards themselves
+    tw = _latest_note("thesis_watch")
+    if not tw:
+        st.info("אין עדיין סריקת-גרעינים — הריצה הלילית תייצר אותה.")
+        return
+    st.markdown("#### הגרעינים הפעילים")
+    members = {str(m.get("ticker")): m for m in (vb.get("members") or [])}
+    _wake_he = {"DORMANT": ("🛌 רדום", "הסל עוד לא זז בגלל הרעיון — רק מעקב"),
+                "WARMING": ("🌡️ מתחמם", "חלק מהתנאים כבר מתקיימים — מתקרב"),
+                "AWAKE": ("🚨 ער", "הרעיון מתבטא בתנועה אמיתית — המניות החזקות "
+                                   "נשלחות לבדיקת-עומק")}
+    _wake_risk = {"DORMANT": ("🛌 רדום", "האזהרה לא פעילה — מעקב בלבד"),
+                  "WARMING": ("🌡️ מתחמם", "סימני-האזהרה מצטברים"),
+                  "AWAKE": ("🛡️ אזהרה פעילה", "הרעיון מתממש בירידה — תפקידו "
+                                              "לחסום קניות, לא להציע אותן")}
+    scans = sorted(tw.get("scans") or [],
+                   key=lambda x: {"AWAKE": 0, "WARMING": 1}.get(
+                       str(x.get("status")), 2))
+    for sc in scans:
+        stt = str(sc.get("status"))
+        is_risk = sc.get("mode") == "risk"
+        icon, expl = (_wake_risk if is_risk else _wake_he).get(stt, (stt, ""))
+        core = sc.get("core") or {}
+        ew = core.get("ew_20d")
+        rs = core.get("rs_share")
+        locos = sc.get("locomotives") or []
+        in_vip = [(t, members.get(t)) for t in locos if members.get(t)]
+        hot = " 🔥" if sc.get("hot") else ""
+        risk = ""
+        pulse = []
+        if ew is not None:
+            pulse.append(f"הסל זז {ew:+.1f}% בחודש-מסחר")
+        if rs is not None:
+            pulse.append(f"{int(rs * 100)}% מהמניות חזקות מהשוק")
+        vip_ln = ""
+        if in_vip:
+            vip_ln = " · ".join(
+                f"**{t}** בבדיקת-עומק ({_STAGE_HE.get(str((m or {}).get('status')), '')})"
+                for t, m in in_vip)
+        elif locos and stt == "AWAKE":
+            vip_ln = "המובילות: " + ", ".join(locos)
+        basket = [str(r.get("ticker")) for r in sc.get("core_rows") or []]
+        news = sc.get("qual_today") or []
+        silent = sc.get("days_since_news")
+        news_ln = (f"📰 כותרת אחרונה שנוגעת לרעיון: לפני "
+                   f"{silent} ימים" if silent is not None and silent > 0
+                   else "📰 יש כותרות טריות שנוגעות לרעיון" if news else "")
+        st.markdown(
+            f'<div class="papow-card"><span class="tkr">{sc.get("title_he")}</span>'
+            f'{hot} <span class="papow-stage">{icon}</span>'
+            f'<div class="sub">{str(sc.get("narrative_he") or "")[:150]}{risk}</div>'
+            + (f'<div class="sub">🧺 הסל: {", ".join(basket[:8])}</div>'
+               if basket else "")
+            + f'<div class="sub">{expl}' + (" · " + " · ".join(pulse) if pulse else "")
+            + '</div>'
+            + (f'<div class="sub">👑 {vip_ln}</div>' if vip_ln else "")
+            + (f'<div class="sub">{news_ln}</div>' if news_ln else "")
+            + '</div>', unsafe_allow_html=True)
+    st.caption("💡 רעיונות-ניסוי (פרשנויות מתחרות שנמדדות זו מול זו) נמצאים "
+               "בלשונית \"רעיונות\" — כשרעיון-ניסוי מוכיח את עצמו הוא הופך לגרעין.")
 
 
 def _desk_tab() -> None:
@@ -1665,19 +1827,24 @@ def _decision_strip() -> None:
     """🎯 the ONE strip the owner reads first (17.07 UX): everything that awaits
     HIS judgment, aggregated across tabs — the operator-system contract."""
     items: list[str] = []
+    fyi: list[str] = []
     try:
         tr = _latest_note("thesis_research") or {}
         n_th = sum(1 for r in tr.get("results") or []
                    if r.get("escalated")
                    and str(r.get("owner_decision") or "PENDING") == "PENDING")
         if n_th:
-            items.append(f"🧪 {n_th} תזות-מחקר 8+ (טאב-הובלה)")
+            items.append(f"🧪 {n_th} רעיונות-מחקר בציון גבוה — לאשר/לדחות "
+                         "בלשונית «🧬 גרעינים»")
         n_open = sum(1 for i in tr.get("queue") or [] if i.get("status") == "OPEN")
         if n_open:
-            items.append(f"🔎 {n_open} חקירות פתוחות")
+            fyi.append(f"🔎 {n_open} חקירות רצות ברקע (אין פעולה שלך)")
         ib = _latest_note("idea_board") or {}
-        if ib.get("n_pending"):
-            items.append(f"💡 {ib['n_pending']} רעיונות לאישור (טאב-רעיונות)")
+        n_cards = sum(1 for i in ib.get("ideas") or []
+                      if str(i.get("status")) in ("DRAFT", "PENDING_APPROVAL"))
+        if n_cards:
+            items.append(f"💡 {n_cards} רעיונות עם כפתור אשר/דחה — "
+                         "לשונית «💡 רעיונות»")
         vb = _latest_note("vip_board") or {}
         fx = (vb.get("funnels") or {}).get("context_discovery") or {}
         if fx.get("direct_vip_entries"):
@@ -1688,9 +1855,12 @@ def _decision_strip() -> None:
     except Exception:                                     # noqa: BLE001 — strip is additive
         return
     if items:
-        st.info("🎯 **ממתין להחלטתך:** " + " · ".join(items))
+        st.info("🎯 **מחכה להחלטה שלך (יש כפתור):** " + " · ".join(items)
+                + (("  \n🛰️ " + " · ".join(fyi)) if fyi else ""))
     else:
-        st.caption("🎯 אין החלטות פתוחות — המערכת רצה לבד ✅")
+        st.caption("🎯 שום דבר לא מחכה להחלטה שלך כרגע"
+                   + (" · " + " · ".join(fyi) if fyi else "")
+                   + " — המערכת תעצור רק כשתצטרך להכריע.")
 
 
 def main() -> None:
@@ -1700,7 +1870,8 @@ def main() -> None:
     _decision_strip()
     # order = the owner's working process (RTL: first renders rightmost): the deal
     # manager and VIP first, the entry queue beside them, context next, ops last.
-    tabs = st.tabs(["💼 עסקאות", "👑 VIP", "🚪 תור-VIP", "💡 רעיונות", "🦅 הובלה",
+    tabs = st.tabs(["💼 עסקאות", "👑 VIP", "🚪 תור-VIP", "🧬 גרעינים",
+                    "💡 רעיונות", "🦅 הובלה",
                     "📡 רשימות", "🚦 מפעיל", "🛠 שיפורים", "📖 אוזבקי"])
     with tabs[0]:
         _slots_tab()
@@ -1709,16 +1880,18 @@ def main() -> None:
     with tabs[2]:
         _vip_queue_tab()
     with tabs[3]:
-        _ideas_tab()
+        _nuclei_tab()
     with tabs[4]:
-        _leadership_tab()
+        _ideas_tab()
     with tabs[5]:
-        _watchlists_tab()
+        _leadership_tab()
     with tabs[6]:
-        _operator_tab()
+        _watchlists_tab()
     with tabs[7]:
-        _improvement_tab()
+        _operator_tab()
     with tabs[8]:
+        _improvement_tab()
+    with tabs[9]:
         _ozbeki_tab()
     _footer()
 
