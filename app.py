@@ -123,8 +123,14 @@ def _ribbon() -> None:
     if mr.get("regime_type"):
         frag = str(mr.get("market_fragility"))
         cls = "coral" if frag in ("high", "elevated") else "volt"
-        chips.append(f'<span class="papow-chip {cls}">🧭 {mr.get("regime_type")} · '
-                     f'{frag}</span>')
+        _rg_he = {"fakeout_prone": "שוק חשוד-פריצות-שווא", "trending": "שוק במגמה",
+                  "choppy": "שוק קופצני", "risk_off": "שוק בורח-מסיכון",
+                  "rotation": "שוק ברוטציה", "range_bound": "שוק בטווח"}
+        _fr_he = {"high": "שבירות גבוהה", "elevated": "שבירות מוגברת",
+                  "normal": "שבירות רגילה", "low": "שבירות נמוכה"}
+        chips.append(f'<span class="papow-chip {cls}">🧭 '
+                     f'{_rg_he.get(str(mr.get("regime_type")), mr.get("regime_type"))}'
+                     f' · {_fr_he.get(frag, frag)}</span>')
     eq = (acct.get("metrics") or {}).get("terminal_equity")
     if eq:
         chips.append(f'<span class="papow-chip">💼 ₪<b>{eq:,.0f}</b></span>')
@@ -347,7 +353,7 @@ def _mailing_list_ui() -> None:
 # ---------- views ----------
 _STATE_HE = {"hold": "בפוזיציה", "buy_signal": "אות קנייה", "candidate": "מועמדת",
              "watch": "מעקב"}
-_ICON = {"filled": "📈", "research": "🔬", "ready": "🟢"}
+_ICON = {"filled": "📈", "research": "🔬", "ready": "⚪"}
 
 
 def _accrual() -> None:
@@ -444,6 +450,10 @@ def _slots_tab() -> None:
     """מנהל-העסקאות: פוזיציות ו-P&L קודם; פסק-הדסק כרצועה (Deal Desk המלא בהרחבה —
     הערך העסקי שלו: הוא השוער שקובע אם מותר לפרוס הון היום; owner 13.07)."""
     _accrual()
+    st.caption("💼 **מה זה המסך הזה:** שולחן-העסקאות. 4 סלוטים לקניות-נייר, "
+               "מה שמחכה לאישורך מופיע עם כפתורים, והחזקות פתוחות מקבלות קריאת-"
+               "החזקה לילית. ⚪ פנוי = יש מקום, לא המלצה לקנות.  \n"
+               "**המסלול המלא:** 📡 רשימות ← 🚪 תור ← 👑 בדיקת-עומק ← 💼 סלוט (כאן)")
     acct = _latest("account_snapshots") or {}
     board = acct.get("slot_board") or {}
     if not board:
@@ -582,7 +592,11 @@ def _slots_tab() -> None:
                     st.error(f"🔴 שורה תחתונה: האנליסט אומר {rec} — שקול לדחות או להמתין.")
                 else:
                     st.info("🟡 שורה תחתונה: תמונה חלקית — ראה שערים ואנליסט למעלה.")
-    st.caption(f"as of **{board.get('date')}** · desk verdict: **{board.get('desk_verdict')}**")
+    _dv_he = {"GO": "🟢 מותר לפרוס", "WAIT": "🟠 ממתינים — לא פורסים היום",
+              "NO_GO": "🔴 לא פורסים"}
+    _dv = str(board.get("desk_verdict")).upper()
+    st.caption(f"נכון ל-**{board.get('date')}** (הריצה הלילית האחרונה) · "
+               f"שוער-הפריסה: **{_dv_he.get(_dv, _dv)}**")
     cols = st.columns(4)
     for i, s in enumerate((board.get("slots") or [])[:4]):
         with cols[i]:
@@ -602,10 +616,11 @@ def _slots_tab() -> None:
                     f'{s.get("exit_style")} · נותרו {s.get("days_left")} ימים'
                     f'</div></div>', unsafe_allow_html=True)
             elif state == "research":
-                st.metric(f"{_ICON['research']} Slot {i+1}", "research",
-                          f"{s.get('days_left')}d left")
+                st.metric(f"{_ICON['research']} סלוט {i+1}", "בחקירה",
+                          f"נותרו {s.get('days_left')} ימים")
             else:
-                st.metric(f"{_ICON['ready']} Slot {i+1}", "ready", "cash")
+                st.metric(f"{_ICON['ready']} סלוט {i+1}", "פנוי",
+                          "מזומן ממתין — לא המלצה", delta_color="off")
     # nightly HOLD reads per open position — the manager's real question: להחזיק? להדק?
     held_names = [str(s.get("ticker")) for s in (board.get("slots") or [])
                   if s.get("state") == "filled"]
@@ -774,8 +789,8 @@ def _vip_tab() -> None:
             cf = (m0.get("maturity_kinds") or {}).get("candidate_fit") or {}
             if not cf:
                 return ""
-            out = (f' · התאמת-מועמדת: {cf.get("confirmations", "?")}/'
-                   f'{cf.get("required", 1)} אישורים')
+            out = (f' · התאמת-מועמדת: {cf.get("confirmations", "?")} אישורים '
+                   f'(נדרש {cf.get("required", 1)})')
             if cf.get("structural_rule"):
                 out += (" · מבנה ✓" if cf.get("structural_confirmed")
                         else f' · ממתין-למבנה ({cf["structural_rule"]})')
@@ -838,6 +853,10 @@ def _vip_tab() -> None:
                        + (f' · תוצאה: {_ax_he.get(str(_out), _out)}' if _out else "")
                        + (f' · פעולה אחרונה: {_ax_he.get(str(_act), _act)}'
                           if _act and not _out else "") + '</div>')
+            if _c.startswith("BLOCKED"):
+                axes_ln += ('<div class="sub">🚫 <b>השורה התחתונה: אין קנייה '
+                            'היום</b> — גם אם הניתוח למעלה חיובי, ההחלטה חסומה '
+                            'והכרטיס למעקב בלבד</div>')
             if m.get("data_status") == "DATA_HOLD":
                 mag += (f' <span class="papow-chip cyan">🧊 DATA_HOLD — '
                         f'{m.get("data_hold_reason") or "בעיית דאטה"} '
@@ -912,7 +931,8 @@ def _idea_action(idea_id: str, action: str, notes: str = "") -> None:
 _IDEA_ST_HE = {"PENDING_APPROVAL": "🟡 ממתין לאישורך", "APPROVED": "🟢 מאושר ורץ",
                "REJECTED": "⛔ נדחה", "RETURNED": "↩️ הוחזר לעריכה",
                "REFUTED": "❌ הופרך (בתנאים שאושרו)", "CONFIRMED": "✅ אושש",
-               "EXPIRED": "⌛ פג", "DRAFT": "📝 טיוטה", "RETIRED": "⚫ הושבת"}
+               "EXPIRED": "⌛ פג", "DRAFT": "📝 טיוטה", "RETIRED": "⚫ הושבת",
+               "BACKLOG_UNPRESENTED": "📦 במלאי — עדיפות נמוכה"}
 
 
 def _ideas_intro() -> None:
@@ -941,7 +961,7 @@ def _ideas_tab() -> None:
                   if str(i.get("status")) in ("DRAFT", "PENDING_APPROVAL")))
     c3.metric("🟢 רשימות-SHADOW רצות",
               sum(1 for i in ideas if i.get("status") == "APPROVED"))
-    c4.metric("📦 במלאי (לא הוצג)",
+    c4.metric("📦 במלאי (עדיפות נמוכה)",
               sum(1 for i in ideas if i.get("status") == "BACKLOG_UNPRESENTED"))
     c5.metric("📊 אירועי-מועמדות הלילה",
               sum(sum(v.values()) for v in (q.get("candidate_counts") or {}).values()))
@@ -992,7 +1012,12 @@ def _ideas_tab() -> None:
                    f"{s.get('relevance_window_days')} ימים מ-{s.get('opened_at')}")
         for ev in (s.get("evidence") or [])[:4]:
             st.caption(f"• {ev}")
+        if s.get("evidence"):
+            st.caption("· הראיות לעיל = מרגע פתיחת-הסיטואציה, לא מתעדכנות יומית — "
+                       "המצב העדכני של הסל בלשונית «🧬 גרעינים»")
         group = [i for i in ideas if i.get("situation_id") == s.get("situation_id")]
+        _ord = {"PENDING_APPROVAL": 0, "DRAFT": 0, "APPROVED": 1, "RETURNED": 2}
+        group.sort(key=lambda i0: _ord.get(str(i0.get("status")), 3))
         for i in group:
             stt = str(i.get("status"))
             st.markdown(
@@ -1116,7 +1141,8 @@ def _vip_queue_tab() -> None:
     c1, c2, c3 = st.columns(3)
     c1.metric("👑 קיבולת VIP", cap.get("vip", "—"))
     c2.metric("🔬 בניתוח-עומק", cap.get("deep", "—"))
-    c3.metric("🔏 גרסת-סמכות", str(q.get("authority_snapshot_version") or "—"))
+    c3.metric("🧾 אירועי-הלילה", len(q.get("events_today") or []))
+    st.caption(f"🔏 חותם-סמכות (טכני): {q.get('authority_snapshot_version') or '—'}")
     # THREE funnels (owner blocker 4): Core / Opportunistic / Context-Discovery —
     # Context must read 0 direct entries; orphans are raw material, not failures
     fns = q.get("funnels") or {}
@@ -1153,7 +1179,7 @@ def _vip_queue_tab() -> None:
             "ticker": m.get("ticker"),
             "שלב": _STAGE_HE.get(str(m.get("status")), m.get("status")),
             "מוכנות-מסחר": m.get("maturity"), "חסר": m.get("missing_gate"),
-            "אישורים": (lambda cf: f"{cf.get('confirmations', '?')}/"
+            "אישורים": (lambda cf: f"{cf.get('confirmations', '?')} מתוך "
                         f"{cf.get('required', 1)}")(
                 (m.get("maturity_kinds") or {}).get("candidate_fit") or {}),
             "ספר": m.get("book_id") or "",
@@ -1212,10 +1238,12 @@ def _vip_queue_tab() -> None:
                                    else "🟢" if g["ok"] else "🔴"),
                         "detail": g["why"]} for g in r["gates"]]),
                                  use_container_width=True, hide_index=True)
+                st.caption("כללי-הכניסה כפי שנכתבו בחוזה (טכני, באנגלית):")
                 for k, v in (r.get("entry_rules") or {}).items():
                     st.markdown(f"- `{k}`: {v}")
                 if r.get("prior"):
-                    st.caption(f"prior (in-sample): {r['prior']}")
+                    st.caption("סטטיסטיקת-עבר של התבנית (על מדגם היסטורי, "
+                               f"לא תחזית): {r['prior']}")
     st.caption("🧬 הגרעינים (התזות) עברו ללשונית משלהם — «גרעינים» — שם רואים כל רעיון, הסל שלו ומצב-ההתעוררות.")
     ev = q.get("events_today") or []
     _CODE_HE = {
@@ -1248,7 +1276,7 @@ def _vip_queue_tab() -> None:
         with st.expander(f"🧾 מה קרה הלילה, שורה-שורה ({len(vis)})"):
             for e in vis:
                 he = _CODE_HE.get(str(e.get("reason_code")), e.get("reason_code"))
-                st.caption(f"**{e.get('ticker')}** · {he}  \n"
+                st.caption(f"**{e.get('ticker') or '(כלל-מערכת)'}** · {he}  \n"
                            f"<span style='opacity:.55;font-size:.8em'>"
                            f"{str(e.get('detail'))[:110]}</span>",
                            unsafe_allow_html=True)
@@ -1324,7 +1352,7 @@ def _research_theses_card() -> None:
         pl = es.get("pilot") or {}
         with st.expander(f"🌱 אותות-מוקדמים (פיילוט-SHADOW) — "
                          f"{len(es.get('fired') or [])} זיהויים · "
-                         f"{pl.get('runs', 0)} ריצות"):
+                         f"ריצות: {pl.get('runs', 0)}"):
             st.caption("גילוי-מוקדם: אותות חלשים/חוזרים שמצטברים לפני מהלך. "
                        "לעולם לא תובע VIP — רק סיטואציה/חקירה/תצפית. "
                        f"מדד-ראשי: רווח-זמן מול הזיהוי הישן "
@@ -1430,7 +1458,7 @@ def _nuclei_tab() -> None:
         return
     st.markdown("#### הגרעינים הפעילים")
     members = {str(m.get("ticker")): m for m in (vb.get("members") or [])}
-    _wake_he = {"DORMANT": ("🛌 רדום", "הסל עוד לא זז בגלל הרעיון — רק מעקב"),
+    _wake_he = {"DORMANT": ("🛌 רדום", "התנועה בסל עדיין לא מאשרת את הרעיון — מעקב בלבד"),
                 "WARMING": ("🌡️ מתחמם", "חלק מהתנאים כבר מתקיימים — מתקרב"),
                 "AWAKE": ("🚨 ער", "הרעיון מתבטא בתנועה אמיתית — המניות החזקות "
                                    "נשלחות לבדיקת-עומק")}
