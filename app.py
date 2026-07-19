@@ -806,6 +806,36 @@ def _render_deep_notes(ticker: str, n: int = 2) -> None:
         st.divider()
 
 
+def _vip_dossier_line(t: str) -> None:
+    """The identity block under a VIP card (owner 19.07: 'מי היא? מה דחף אותה?')."""
+    dd = ((_latest_note("name_dossier") or {}).get("dossiers") or {}).get(t)
+    if not dd:
+        return
+    ident = dd.get("identity_he") or ""
+    _drv_he = {"fundamental": "פונדמנטלי", "narrative": "נרטיב",
+               "mechanical_squeeze": "מכני (שורט-סקוויז)", "sympathy": "סימפטיה",
+               "mixed": "משולב", "unknown": "לא-ידוע"}
+    drv = _drv_he.get(str(dd.get("driver_class")), dd.get("driver_class"))
+    cats = dd.get("next_catalysts") or []
+    cat_ln = " · ".join(f"{c.get('date')} {c.get('what_he')}"
+                        + (" ⚡בינארי" if c.get("binary") else "")
+                        for c in cats[:2])
+    si = dd.get("short_interest") or {}
+    si_ln = (f"שורט {si.get('short_pct_float', 0):.1%} · כיסוי "
+             f"{si.get('days_to_cover')}י"
+             if si.get("short_pct_float") else "")
+    st.caption(f"🪪 **תעודת-זהות:** {ident}  \n"
+               + f"מנוע-התנועה: **{drv}**"
+               + (f" — {dd.get('driver_he')}" if dd.get("driver_he") else "")
+               + (f" · {si_ln}" if si_ln else "")
+               + (f"  \n⏰ קטליזטורים: {cat_ln}" if cat_ln else "")
+               + (f"  \n📅 דוח קרוב: {dd['next_earnings']}"
+                  if dd.get("next_earnings") else ""))
+    weak = dd.get("weaken_tests_he") or []
+    if weak:
+        st.caption("🧪 מה יחליש את התנועה: " + " · ".join(weak[:2]))
+
+
 def _vip_tab() -> None:
     st.caption("👑 **מה זה המסך הזה:** חדר-הבדיקה. המניות שכבר הבשילו מקבלות "
                "כאן ניתוח-עומק יומי, ובתחנות קבועות נופלת החלטת-צל (קנייה-על-נייר/"
@@ -960,6 +990,7 @@ def _vip_tab() -> None:
             f'{m.get("days_analyzed")} → תחנה {m.get("next_station")} · מקור: '
             f'{m.get("source")}{read}</div>{axes_ln}{attr_ln}{need_ln}</div>',
             unsafe_allow_html=True)
+        _vip_dossier_line(str(m.get("ticker")))
         with st.expander(f"🔬 ניתוח-העומק המלא של {m.get('ticker')}"):
             _render_memory(str(m.get("ticker")))
             _render_deep_notes(str(m.get("ticker")))
@@ -1297,6 +1328,7 @@ def _vip_queue_tab() -> None:
             if r["state"] == "watch":
                 continue
             with st.expander(f"🔍 {r['ticker']} — פירוט-שערים מלא"):
+                _vip_dossier_line(str(r["ticker"]))
                 if r.get("gates"):
                     st.dataframe(pd.DataFrame([{
                         "gate": g["gate"],
@@ -1785,6 +1817,23 @@ def _leadership_tab() -> None:
 def _improvement_tab() -> None:
     st.caption("Approve = log + monitor + queue. NOTHING auto-applies; approved changes are "
                "implemented in a batch when the logic engine opens.")
+    ar = _latest_note("dossier_arena") or {}
+    if ar.get("pairs_total"):
+        st.markdown("#### 🪪 זירת תיק-הזהות — האם ההקשר משפר את השיפוט?")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("זוגות (עם/בלי)", ar.get("pairs_total", 0))
+        c2.metric("נמדדו מול הטייפ", ar.get("pairs_graded", 0))
+        c3.metric("ימי-מחלוקת", ar.get("pairs_diverged", 0))
+        c4.metric("רצפת-פסיקה",
+                  "✅ הושגה" if ar.get("verdict_floor_met") else "⏳ נבנית")
+        if ar.get("official_hit_5s") is not None:
+            st.caption(f"פגיעה-5ס: עם-תיק {ar.get('official_hit_5s')} מול "
+                       f"בלי-תיק {ar.get('control_hit_5s')}"
+                       + (f" · בימי-מחלוקת בלבד: עם {ar.get('diverged_official_hit_5s')}"
+                          f" מול בלי {ar.get('diverged_control_hit_5s')}"
+                          if ar.get("diverged_official_hit_5s") is not None else ""))
+        st.caption(str(ar.get("note_he") or ""))
+        st.divider()
     # the CLOSED learning loop (owner 14.07): matured journal reviews graded fwd-vs-QQQ
     jr = ((_latest("leadership_snapshots") or {}).get("learning")
           or {}).get("journal_reviews") or {}
