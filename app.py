@@ -139,6 +139,14 @@ def _ribbon() -> None:
         cap = vipq.get("capacity") or {}
         chips.append(f'<span class="papow-chip gold">👑 VIP {cap.get("vip", "—")} · '
                      f'עומק {cap.get("deep", "—")}</span>')
+    pulse = _latest_note("intraday_pulse") or {}
+    if pulse.get("date") == date.today().isoformat():
+        mk = pulse.get("market") or {}
+        _q = mk.get("QQQ")
+        chips.append('<span class="papow-chip cyan">🕒 עדכון-ביניים '
+                     f'{pulse.get("time_utc")}Z (עיכוב {pulse.get("delay_min")} דק׳)'
+                     + (f' · QQQ {_q:+.1f}%' if _q is not None else "")
+                     + '</span>')
     if chips:
         st.markdown('<div class="papow-ribbon">' + "".join(chips) + "</div>",
                     unsafe_allow_html=True)
@@ -457,8 +465,18 @@ def _slots_tab() -> None:
     acct = _latest("account_snapshots") or {}
     board = acct.get("slot_board") or {}
     if not board:
-        st.info("no board yet — the nightly loop populates it")
+        st.info("אין עדיין לוח — הריצה הלילית תיצור אותו")
         return
+    _pl = _latest_note("intraday_pulse") or {}
+    if _pl.get("date") == date.today().isoformat() and _pl.get("positions"):
+        _rows = " · ".join(
+            f"**{p.get('ticker')}** {p.get('last', '—')}"
+            + (f" ({p['est_pnl_pct']:+.1f}%)" if p.get("est_pnl_pct") is not None
+               else "")
+            for p in _pl["positions"])
+        st.caption(f"🕒 **דופק-ביניים {_pl.get('time_utc')}Z** "
+                   f"(עיכוב {_pl.get('delay_min')} דק׳): {_rows}  \n"
+                   "_תצוגה בלבד — ההחלטות נופלות על נתוני-הסגירה בריצת-הלילה_")
     d = _latest("forward_desk_snapshots") or {}
     r0, c0 = d.get("readiness") or {}, d.get("calibration") or {}
     hr = "—" if c0.get("hit_rate") is None else f"{c0['hit_rate']:.0%}"
