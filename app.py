@@ -1012,7 +1012,13 @@ def _ideas_tab() -> None:
                    f"{s.get('relevance_window_days')} ימים מ-{s.get('opened_at')}")
         for ev in (s.get("evidence") or [])[:4]:
             st.caption(f"• {ev}")
-        if s.get("evidence"):
+        cr = s.get("current_read") or {}
+        if cr.get("read_he"):
+            st.caption(f"📈 **המצב עכשיו ({cr.get('date')}):** {cr['read_he']}")
+            if s.get("evidence"):
+                st.caption("· הראיות שלמעלה = מרגע פתיחת-הסיטואציה (קפואות); "
+                           "השורה הזו מתעדכנת כל לילה")
+        elif s.get("evidence"):
             st.caption("· הראיות לעיל = מרגע פתיחת-הסיטואציה, לא מתעדכנות יומית — "
                        "המצב העדכני של הסל בלשונית «🧬 גרעינים»")
         group = [i for i in ideas if i.get("situation_id") == s.get("situation_id")]
