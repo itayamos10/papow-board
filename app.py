@@ -1002,16 +1002,21 @@ def _vip_tab() -> None:
                        f'(מיידי) / נחלש &gt;3 ימים · דאטה: '
                        f'{ev.get("valid_days", 0)}/{ev.get("total_days", 0)} ימים תקפים, '
                        f'מחיר {fresh}</div>')
+        _nsh = str(m.get("next_step_he") or "")
         st.markdown(
-            f'<div class="papow-card"><span class="tkr">{m.get("ticker")}</span>{mag}{beh} '
-            f'{k1}{k2} <span class="papow-stage">{stage}</span>'
-            f'<div class="sub">מוכנות-מסחר {m.get("maturity")}{gate}'
-            f'{_conf_ln(m)} · יום-עומק '
-            f'{m.get("days_analyzed")} → תחנה {m.get("next_station")} · מקור: '
-            f'{m.get("source")}{read}</div>{axes_ln}{attr_ln}{need_ln}</div>',
-            unsafe_allow_html=True)
+            f'<div class="papow-card"><span class="tkr">{m.get("ticker")}</span> '
+            f'{k1}{k2}'
+            + (f'<div class="sub"><b>{_nsh}</b></div>' if _nsh else "")
+            + '</div>', unsafe_allow_html=True)
         _vip_dossier_line(str(m.get("ticker")))
-        with st.expander(f"🔬 ניתוח-העומק המלא של {m.get('ticker')}"):
+        with st.expander(f"🔬 הפירוט הטכני המלא של {m.get('ticker')}"):
+            st.markdown(
+                f'{mag}{beh} <span class="papow-stage">{stage}</span>'
+                f'<div class="sub">מוכנות-מסחר {m.get("maturity")}{gate}'
+                f'{_conf_ln(m)} · יום-עומק '
+                f'{m.get("days_analyzed")} → תחנה {m.get("next_station")} · מקור: '
+                f'{m.get("source")}{read}</div>{axes_ln}{attr_ln}{need_ln}',
+                unsafe_allow_html=True)
             _render_memory(str(m.get("ticker")))
             _render_deep_notes(str(m.get("ticker")))
     for d in q.get("decisions") or []:
@@ -1291,8 +1296,12 @@ def _vip_queue_tab() -> None:
     rest = [m for m in members if not str(m.get("status", "")).startswith(
         ("DEEP", "DECISION", "CONTINUE_DEEP"))]
     if rest:
-        st.markdown("#### מבשילים בתור")
-        st.dataframe(pd.DataFrame([{
+        st.markdown("#### מבשילים בתור — מה עוצר כל אחת")
+        for m in rest:
+            st.markdown(f"**{m.get('ticker')}** — "
+                        f"{m.get('next_step_he') or _STAGE_HE.get(str(m.get('status')), m.get('status'))}")
+        with st.expander("🛠 הטבלה הטכנית המלאה"):
+            st.dataframe(pd.DataFrame([{
             "ticker": m.get("ticker"),
             "שלב": _STAGE_HE.get(str(m.get("status")), m.get("status")),
             "מוכנות-מסחר": m.get("maturity"), "חסר": m.get("missing_gate"),
