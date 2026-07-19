@@ -139,7 +139,7 @@ def _ribbon() -> None:
         cap = vipq.get("capacity") or {}
         chips.append(f'<span class="papow-chip gold">👑 VIP {cap.get("vip", "—")} · '
                      f'עומק {cap.get("deep", "—")}</span>')
-    pulse = _latest_note("intraday_pulse") or {}
+    pulse = _fresh_note("intraday_pulse") or {}
     if pulse.get("date") == date.today().isoformat():
         mk = pulse.get("market") or {}
         _q = mk.get("QQQ")
@@ -215,6 +215,22 @@ def _latest(table: str) -> dict[str, Any] | None:
 
 
 @st.cache_data(ttl=600, show_spinner=False)
+def _fresh_note(kind: str) -> dict[str, Any] | None:
+    """Same as _latest_note but with a short cache — for 15-min intraday notes."""
+    return _fresh_note_impl(kind)
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def _fresh_note_impl(kind: str) -> dict[str, Any] | None:
+    try:
+        with _engine().connect() as c:
+            row = c.execute(text('select content from research_notes where kind = :k '
+                                 'order by date desc limit 1'), {"k": kind}).fetchone()
+        return json.loads(row[0]) if row else None
+    except Exception:
+        return None
+
+
 def _latest_note(kind: str) -> dict[str, Any] | None:
     """Newest research note of a kind (e.g. the nightly vip_board queue snapshot)."""
     try:
@@ -388,6 +404,27 @@ def _operator_tab() -> None:
     _mailing_list_ui()
     st.divider()
     today = date.today().isoformat()
+    _so2 = _fresh_note("sentinel_ops") or {}
+    if _so2.get("date") == today:
+        _gs = _so2.get("guard_state")
+        _w = _so2.get("watched") or {}
+        st.markdown("#### 🛰️ שכבת-היום — מה רץ עכשיו")
+        st.info(("🛡️ השומר **פעיל** — שומר על: "
+                 + ", ".join((_w.get("positions") or []) + (_w.get("triggers") or []))
+                 if _gs == "armed" else
+                 "🛌 השומר **רדום** — אין פוזיציות/טריגרים לשמור עליהם")
+                + f" · דפיקות היום: {_so2.get('ticks_today', 0)}"
+                + f" · התראות: {len(_so2.get('alerts_today') or [])}"
+                + f" · דופק אחרון: {_so2.get('pulse_time_utc')}Z")
+        for a in list(_so2.get("alerts_today") or [])[-8:][::-1]:
+            st.caption(f"{a.get('time')}Z {a.get('level')} {a.get('he')}")
+        st.caption("⏰ העוגנים הקבועים: "
+                   + " · ".join(_so2.get("anchors_il") or []))
+        st.divider()
+    else:
+        st.caption("🛰️ שכבת-היום: אין עדיין דופק מהיום — "
+                   "מתעורר בשעות המסחר (16:35 שעון ישראל)")
+        st.divider()
     prev = today
     for _ in range(4):                          # last expected NY session (weekend-aware)
         d = date.fromisoformat(prev) - timedelta(days=1)
@@ -467,13 +504,18 @@ def _slots_tab() -> None:
     if not board:
         st.info("אין עדיין לוח — הריצה הלילית תיצור אותו")
         return
-    _pl = _latest_note("intraday_pulse") or {}
+    _pl = _fresh_note("intraday_pulse") or {}
     if _pl.get("date") == date.today().isoformat() and _pl.get("positions"):
         _rows = " · ".join(
             f"**{p.get('ticker')}** {p.get('last', '—')}"
             + (f" ({p['est_pnl_pct']:+.1f}%)" if p.get("est_pnl_pct") is not None
                else "")
             for p in _pl["positions"])
+        _so0 = _fresh_note("sentinel_ops") or {}
+        if (_so0.get("date") == date.today().isoformat()
+                and _so0.get("guard_state") == "dormant"):
+            st.caption("🛌 השומר רדום — אין פוזיציות פתוחות ואין טריגרים "
+                       "חמושים; אין מה לשמור כרגע")
         st.caption(f"🕒 **דופק-ביניים {_pl.get('time_utc')}Z** "
                    f"(עיכוב {_pl.get('delay_min')} דק׳): {_rows}  \n"
                    "_תצוגה בלבד — ההחלטות נופלות על נתוני-הסגירה בריצת-הלילה_")
@@ -1906,6 +1948,15 @@ def _decision_strip() -> None:
             items.append(f"💥 {n_appr} החלטות-VIP הלילה (טאב-VIP)")
     except Exception:                                     # noqa: BLE001 — strip is additive
         return
+    _so = _fresh_note("sentinel_ops") or {}
+    if (_so.get("date") == date.today().isoformat()
+            and _so.get("alerts_today")):
+        _last3 = list(_so["alerts_today"])[-3:]
+        st.error("🛰️ **התראות-היום מהשומר:** "
+                 + " · ".join(f"{a.get('time')}Z {a.get('level')} {a.get('he')}"
+                              for a in reversed(_last3))
+                 + (f" (+{len(_so['alerts_today']) - 3} נוספות בלשונית «🚦 מפעיל»)"
+                    if len(_so["alerts_today"]) > 3 else ""))
     if items:
         st.info("🎯 **מחכה להחלטה שלך (יש כפתור):** " + " · ".join(items)
                 + (("  \n🛰️ " + " · ".join(fyi)) if fyi else ""))
