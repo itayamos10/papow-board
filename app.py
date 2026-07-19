@@ -551,8 +551,22 @@ def _slots_tab() -> None:
         cands = [r for r in board.get("pipeline") or []
                  if r.get("state") == "candidate" and str(r.get("ticker")) not in
                  {str(x.get("ticker")) for x in pend}]
+        _tickets = {str(n.get("ticker", "")).upper(): n
+                    for n in _notes_of("trade_ticket", 12)}
         for p in pend:
             t = str(p.get("ticker"))
+            _tk = _tickets.get(t)
+            if _tk and _tk.get("lines_he"):
+                _v_he = {"GO": "🟢 כשיר — גודל מלא",
+                         "GO_HALF": "🟡 כשיר — חצי-גודל",
+                         "WAIT": "🟠 המתנה", "NOT_ELIGIBLE": "🔴 לא-כשיר"}
+                _vv = str(_tk.get("verdict"))
+                st.markdown(f"##### 🎫 תעודת-עסקה — {t}: "
+                            f"**{_v_he.get(_vv, _vv)}**")
+                st.info("**שורה תחתונה: " + str(_tk.get("bottom_line_he"))
+                        + "**")
+                for _ln in _tk["lines_he"]:
+                    st.caption(str(_ln))
             row = pipe_rows.get(t) or {}
             vm = vip_m.get(t) or {}
             c1, c2, c3 = st.columns([3, 1, 1])
@@ -697,9 +711,12 @@ def _slots_tab() -> None:
             rec_he = {"hold": "החזק", "tighten_stop": "הדק סטופ",
                       "take_partial": "מימוש חלקי", "exit": "צא"}.get(
                 str(p.get("manage")), str(p.get("manage") or "—"))
+            _ck = h.get("clock") or {}
             st.markdown(f'<div class="papow-card"><span class="tkr">{t}</span> '
                         f'<b>{rec_he}</b> · תזה: {p.get("thesis_state", "—")}'
-                        f'<div class="sub">{str(p.get("manage_why") or "")[:180]} '
+                        + (f'<div class="sub">{_ck.get("line_he")}</div>'
+                           if _ck.get("line_he") else "")
+                        + f'<div class="sub">{str(p.get("manage_why") or "")[:180]} '
                         f'<i>({h.get("_date")}; המלצה בלבד — ההחלטה שלך)</i></div></div>',
                         unsafe_allow_html=True)
         if not shown:
@@ -807,9 +824,12 @@ def _render_deep_notes(ticker: str, n: int = 2) -> None:
 
 
 def _vip_dossier_line(t: str) -> None:
-    """The identity block under a VIP card (owner 19.07: 'מי היא? מה דחף אותה?')."""
+    """ONE story block per name (owner: clear, business, zero duplication)."""
     dd = ((_latest_note("name_dossier") or {}).get("dossiers") or {}).get(t)
     if not dd:
+        return
+    if dd.get("story_he"):
+        st.caption("🪪 " + str(dd["story_he"]))
         return
     ident = dd.get("identity_he") or ""
     _drv_he = {"fundamental": "פונדמנטלי", "narrative": "נרטיב",
