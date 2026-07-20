@@ -504,6 +504,32 @@ def _slots_tab() -> None:
     if not board:
         st.info("אין עדיין לוח — הריצה הלילית תיצור אותו")
         return
+    _rc = _latest_note("regime_contract") or {}
+    _cn, _st = (_rc.get("contract") or {}), (_rc.get("structure") or {})
+    if _cn:
+        _lq, _ex, _ck = (_cn.get("liquidity") or {}), (_cn.get("exit") or {}), (_cn.get("clocks") or {})
+        _sp = _cn.get("structure") or {}
+        st_ico = "🟢" if _cn.get("may_trade_long") else "🔴"
+        st.markdown(f"#### {st_ico} חוזה-היום: {_cn.get('label')} · {_sp.get('posture')}")
+        if _st.get("read_he"):
+            st.caption("📐 " + str(_st["read_he"]))
+        st.caption(
+            f"לונגים חדשים מותרים: **{_sp.get('max_new_longs')}** · "
+            f"שעונים: הבשלה {_ck.get('maturation_days')} + עומק {_ck.get('deep_days')} · "
+            f"נזילות {_lq.get('tier')} (גודל ×{_lq.get('size_factor')}) · "
+            f"יציאה {_ex.get('profile')}: סטופ {_ex.get('stop_pct')}% · "
+            f"תקרה {_ex.get('time_cap_days')}י"
+            + (" · חיתוך-יום-3" if _ex.get("cut_day3") else ""))
+        if _sp.get("he"):
+            st.caption("🧭 " + str(_sp["he"]))
+    _ei = _latest_note("entry_intents") or {}
+    _live = [i for i in (_ei.get("intents") or []) if i.get("status") == "WAITING"]
+    if _live:
+        st.markdown("#### ⏳ ממתינות-לתרחיש (אושרו — טרם נקנו)")
+        for _i in _live:
+            st.caption(str(_i.get("line_he") or _i.get("ticker")))
+        st.caption("_קנייה תתבצע רק כשהמחיר יגיע לתרחיש שסומן בניתוח-העומק; "
+                   "חריגה מעל הרמה, שבירת קו-הפסילה או תום החלון מבטלים._")
     _pl = _fresh_note("intraday_pulse") or {}
     if _pl.get("date") == date.today().isoformat() and _pl.get("positions"):
         _rows = " · ".join(
