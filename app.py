@@ -504,6 +504,19 @@ def _slots_tab() -> None:
     if not board:
         st.info("אין עדיין לוח — הריצה הלילית תיצור אותו")
         return
+    _ds = board.get("day_stories") or {}
+    if _ds.get("stories"):                       # 📰 day stories (owner 28.07: "למה
+        # אני לא מקבל את סיפור היום גם במערכת?") — the same bundle the night mail
+        # carries, rendered at the top of the board
+        st.markdown(f"#### 📰 סיפורי היום — {_ds.get('one_liner', '')}")
+        _lead = _ds["stories"][0]
+        st.markdown(f"**{_lead.get('title')}**")
+        st.markdown(str(_lead.get("body") or ""))
+        with st.expander("כל סיפורי-היום"):
+            for _s0 in _ds["stories"][1:]:
+                st.markdown(f"**{_s0.get('title')}**")
+                st.markdown(str(_s0.get("body") or ""))
+            st.caption(str(_ds.get("boundary_he") or ""))
     _rc = _latest_note("regime_contract") or {}
     _cn, _st = (_rc.get("contract") or {}), (_rc.get("structure") or {})
     if _cn:
