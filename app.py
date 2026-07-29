@@ -545,6 +545,25 @@ def _slots_tab() -> None:
     if not board:
         st.info("אין עדיין לוח — הריצה הלילית תיצור אותו")
         return
+    _sa_note = _latest_note("sector_atlas") or {}
+    _mv = _sa_note.get("moving") or []
+    _secs = _sa_note.get("sectors") or {}
+    if _secs:                                  # market map strip (owner 29.07:
+        # simple display — every sector a chip, arrow = direction, gray = quiet)
+        _chips = []
+        for _sec, _e in _secs.items():
+            _he = _e.get("he") or _sec
+            if _e.get("state") == "moving":
+                _arrow = "🔺" if _e.get("sign") == "up" else "🔻"
+                _drv = ", ".join(d.get("ticker", "") for d in
+                                 (_e.get("drivers") or [])[:2])
+                _chips.append(f"**{_arrow} {_he}**" + (f" ({_drv})" if _drv else ""))
+            else:
+                _chips.append(f"<span style='color:#999'>{_he}</span>")
+        st.markdown("🗺️ **מפת-השוק:** " + " · ".join(_chips),
+                    unsafe_allow_html=True)
+        st.caption("🔺 זז-מעלה · 🔻 זז-מטה (בסוגריים: המניות שמניעות) · "
+                   "אפור = שקט. סקטור נכנס למפה רק אחרי לילה שני של אישוש.")
     _ds = board.get("day_stories") or {}
     if _ds.get("stories"):                       # 📰 day stories (owner 28.07: "למה
         # אני לא מקבל את סיפור היום גם במערכת?") — the same bundle the night mail
