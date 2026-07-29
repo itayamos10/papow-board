@@ -1915,6 +1915,22 @@ def _leadership_tab() -> None:
             st.caption("מפת-ההשפעה תיכתב בריצת-הלילה (דורשת שוויי-שוק "
                        "אמיתיים — המילוי רץ כל לילה).")
 
+        # א2 ── לוח-המנועים: כל תזה מתמחה מול השוק ומול הסקטור שלה
+        eng_rows = (lv.get("engines") or {}).get("rows") or []
+        if eng_rows:
+            st.markdown("#### ⚙️ לוח-המנועים — תת-הסקטורים מול הסקטורים")
+            st.dataframe(pd.DataFrame(
+                [{"מנוע": f"{r.get('he')} ({r.get('etf')})",
+                  "סקטור": r.get("sector_he"),
+                  "מול השוק (20d) %": r.get("excess_20"),
+                  "פער מהסקטור %": r.get("gap_20"),
+                  "מחזור ×": r.get("turnover_x")}
+                 for r in eng_rows[:12]]),
+                use_container_width=True, hide_index=True)
+            st.caption("פער מהסקטור = כמה המנוע מתנתק מהתעודה הרחבה שלו "
+                       "(חיובי = מוביל מעלה, שלילי = נשבר לבד). ממוין לפי "
+                       "עוצמת-הפער — מדד, לא המלצה.")
+
         # ב ── איפה הכסף מתרכז — the turnover arena's head
         st.markdown("#### 💰 איפה הכסף מתרכז")
         money = lv.get("money") or []
