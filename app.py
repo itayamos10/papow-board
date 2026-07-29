@@ -1867,27 +1867,43 @@ def _leadership_tab() -> None:
     if lv:
         # א ── מי באמת מזיז את השוק — the contribution math, both directions
         st.markdown("#### 🧭 מי באמת מזיז את השוק")
-        for e in lv.get("real") or []:
-            arrow = "🔺" if e.get("sign") == "up" else "🔻"
-            share = e.get("index_share")
-            head = f"{arrow} **{e.get('he')}** — משקל {e.get('cap_share')}% מהשוק"
-            if isinstance(share, (int, float)):
-                verb = "דוחף" if (e.get("index_pts") or 0) > 0 else "מושך"
-                head += (f" · {verb} {abs(share):.0f}% מתנועת המדד החודש "
-                         f"({e.get('index_pts'):+.1f} נק')")
-            st.markdown(head)
-            drv_bits = []
-            for d in e.get("drivers") or []:
-                bit = f"{d.get('ticker')} ({d.get('ret_20'):+.0f}%)"
-                sh = d.get("sector_share")
-                if isinstance(sh, (int, float)):
-                    bit += (f" — אחראית ל-{sh:.0f}% מתנועת הסקטור" if sh >= 0
-                            else " — נעה נגד כיוון הסקטור")
-                drv_bits.append(bit)
-            if drv_bits:
-                st.caption("המניות שמזיזות אותו: " + " · ".join(drv_bits))
-        if not (lv.get("real") or []):
-            st.caption("אף סקטור לא בתנועה חריגה כרגע — שוק בלי מוביל מובהק.")
+        infl = lv.get("influence") or {}
+        movers = infl.get("market_movers") or []
+        if movers:
+            st.markdown("**מדד-ההובלה הכללי** — המניות שמזיזות את השוק, לפי "
+                        "חלקן מסך התנועה:")
+            st.dataframe(pd.DataFrame(
+                [{"מניה": r.get("ticker"), "סקטור": r.get("he"),
+                  "חודש-מסחר %": r.get("ret_20"),
+                  "% מתנועת השוק": r.get("market_share")} for r in movers]),
+                use_container_width=True, hide_index=True)
+            st.caption(f"מחושב על {infl.get('n_measured')} מניות עם שווי-שוק "
+                       "אמיתי · חלק-תנועה = משקל×תנועה, בשני הכיוונים · "
+                       "העמודה 'חודש-מסחר' נותנת את הכיוון.")
+        secs_infl = infl.get("sectors") or {}
+        if secs_infl:
+            st.markdown("**המדד הפנימי של כל סקטור** — משקלו על השוק וסל "
+                        "המניות שמזיזות אותו:")
+            order = sorted(secs_infl.items(),
+                           key=lambda kv: -(kv[1].get("move_share") or 0))
+            for sec, blk in order:
+                state_chip = ""
+                if blk.get("state") == "moving":
+                    state_chip = " 🔺 בתנועה" if blk.get("sign") == "up" \
+                        else " 🔻 בתנועה"
+                basket = " · ".join(
+                    f"{m.get('ticker')} {m.get('move_share'):.0f}% "
+                    f"({m.get('ret_20'):+.0f}%)"
+                    for m in blk.get("movers") or [])
+                st.markdown(
+                    f"- **{blk.get('he')}**{state_chip} — משקל "
+                    f"{blk.get('cap_share')}% מהשוק · "
+                    f"{blk.get('move_share')}% מהתנועה: {basket}")
+            st.caption("קריאה: 'MU 40% (−28%)' = המניה אחראית ל-40% מתנועת "
+                       "הסקטור, והכיוון שלה החודש −28%.")
+        if not movers and not secs_infl:
+            st.caption("מפת-ההשפעה תיכתב בריצת-הלילה (דורשת שוויי-שוק "
+                       "אמיתיים — המילוי רץ כל לילה).")
 
         # ב ── איפה הכסף מתרכז — the turnover arena's head
         st.markdown("#### 💰 איפה הכסף מתרכז")
