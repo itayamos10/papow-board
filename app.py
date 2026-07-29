@@ -491,6 +491,46 @@ def _operator_tab() -> None:
         st.caption(f"🏦 {ops.get('b0a')}")
 
 
+
+def _notes_of(kind: str, limit: int = 12) -> list[dict]:
+    """Newest N research notes of a kind (the stories tab reads drafts)."""
+    try:
+        with _engine().connect() as c:
+            rows = c.execute(text('select title, date, content from research_notes '
+                                  'where kind = :k order by date desc, id desc '
+                                  'limit :n'), {"k": kind, "n": limit}).fetchall()
+        return [{"title": r[0], "date": r[1], "content": r[2]} for r in rows]
+    except Exception:
+        return []
+
+
+def _stories_tab() -> None:
+    """📰 stories (owner 28.07): day stories + name-post drafts + future piquant
+    posts — everything content-ready, ALWAYS drafts for the owner's eye; the
+    system never publishes on its own."""
+    st.caption("טיוטות-תוכן מהנתונים של אותו יום — לעיון ולבחירה שלך בלבד; "
+               "שום דבר לא מתפרסם לבד.")
+    acct = _latest("account_snapshots") or {}
+    _ds = (acct.get("slot_board") or {}).get("day_stories") or {}
+    if _ds.get("stories"):
+        st.markdown(f"### 📰 סיפורי היום — {_ds.get('one_liner', '')}")
+        for _s0 in _ds["stories"]:
+            with st.expander(str(_s0.get("title")), expanded=(_s0.get("id") == "lead")):
+                st.markdown(str(_s0.get("body") or ""))
+        st.caption(str(_ds.get("boundary_he") or ""))
+        st.divider()
+    posts = _notes_of("name_post")
+    if posts:
+        st.markdown("### 🎯 פוסטים-של-שם (טיוטות)")
+        newest = str(posts[0]["date"])
+        for p0 in posts:
+            fresh = "🆕 " if str(p0["date"]) == newest else ""
+            with st.expander(f"{fresh}{p0['title']}"):
+                st.markdown(str(p0["content"] or ""))
+    if not posts and not _ds.get("stories"):
+        st.info("עוד אין סיפורים — הריצה הלילית הקרובה תייצר אותם")
+
+
 def _slots_tab() -> None:
     """מנהל-העסקאות: פוזיציות ו-P&L קודם; פסק-הדסק כרצועה (Deal Desk המלא בהרחבה —
     הערך העסקי שלו: הוא השוער שקובע אם מותר לפרוס הון היום; owner 13.07)."""
@@ -2090,8 +2130,8 @@ def main() -> None:
     _decision_strip()
     # order = the owner's working process (RTL: first renders rightmost): the deal
     # manager and VIP first, the entry queue beside them, context next, ops last.
-    tabs = st.tabs(["💼 עסקאות", "👑 VIP", "🚪 תור-VIP", "🧬 גרעינים",
-                    "💡 רעיונות", "🦅 הובלה",
+    tabs = st.tabs(["💼 עסקאות", "👑 VIP", "🚪 תור-VIP", "📰 סיפורים",
+                    "🧬 גרעינים", "💡 רעיונות", "🦅 הובלה",
                     "📡 רשימות", "🚦 מפעיל", "🛠 שיפורים", "📖 אוזבקי"])
     with tabs[0]:
         _slots_tab()
@@ -2100,18 +2140,20 @@ def main() -> None:
     with tabs[2]:
         _vip_queue_tab()
     with tabs[3]:
-        _nuclei_tab()
+        _stories_tab()
     with tabs[4]:
-        _ideas_tab()
+        _nuclei_tab()
     with tabs[5]:
-        _leadership_tab()
+        _ideas_tab()
     with tabs[6]:
-        _watchlists_tab()
+        _leadership_tab()
     with tabs[7]:
-        _operator_tab()
+        _watchlists_tab()
     with tabs[8]:
-        _improvement_tab()
+        _operator_tab()
     with tabs[9]:
+        _improvement_tab()
+    with tabs[10]:
         _ozbeki_tab()
     _footer()
 
