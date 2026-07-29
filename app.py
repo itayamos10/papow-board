@@ -1897,10 +1897,18 @@ def _leadership_tab() -> None:
                     f"{m.get('ticker')} {m.get('move_share'):.0f}% "
                     f"({m.get('ret_20'):+.0f}%)"
                     for m in blk.get("movers") or [])
+                loco = blk.get("locomotive") or {}
+                loco_txt = ""
+                if loco:
+                    loco_txt = (f" · 🚂 הקטר: {loco.get('etf_he')} "
+                                f"({loco.get('etf')} "
+                                f"{loco.get('excess_20'):+.0f}% מול "
+                                f"{loco.get('broad_etf')} "
+                                f"{loco.get('broad_excess_20'):+.0f}%)")
                 st.markdown(
                     f"- **{blk.get('he')}**{state_chip} — משקל "
                     f"{blk.get('cap_share')}% מהשוק · "
-                    f"{blk.get('move_share')}% מהתנועה: {basket}")
+                    f"{blk.get('move_share')}% מהתנועה: {basket}{loco_txt}")
             st.caption("קריאה: 'MU 40% (−28%)' = המניה אחראית ל-40% מתנועת "
                        "הסקטור, והכיוון שלה החודש −28%.")
         if not movers and not secs_infl:
