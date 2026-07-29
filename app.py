@@ -519,7 +519,8 @@ def _stories_tab() -> None:
                 st.markdown(str(_s0.get("body") or ""))
         st.caption(str(_ds.get("boundary_he") or ""))
         st.divider()
-    posts = _notes_of("name_post")
+    posts = _notes_of("name_post") + _notes_of("community_post")
+    posts.sort(key=lambda p0: str(p0.get("date")), reverse=True)
     if posts:
         st.markdown("### 🎯 פוסטים-של-שם (טיוטות)")
         newest = str(posts[0]["date"])
