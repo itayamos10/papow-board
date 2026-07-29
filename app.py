@@ -1849,7 +1849,9 @@ def _leadership_tab() -> None:
     render ONLY while the new payload hasn't landed yet."""
     m = _latest("leadership_snapshots") or {}
     story = m.get("market_story") or {}
-    lv = m.get("leadership_v2") or {}
+    # the payload rides the nightly map; until the first post-v2 run, the
+    # standalone note (written the same night the code shipped) fills in
+    lv = m.get("leadership_v2") or _latest_note("leadership_v2") or {}
 
     # 0 ── the index anchor a user verifies first — windows explicit
     st.markdown("#### 🔢 המדדים — יום · שבוע · חודש-מסחר")
