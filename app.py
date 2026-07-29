@@ -1450,8 +1450,19 @@ def _vip_queue_tab() -> None:
             "SL": f"{r['sl_price']} ({r['sl_pct']}%)" if r.get("sl_price") else "—",
             "size": f"₪{r['size_hint']:,.0f}" if r.get("size_hint")
                     and r["state"] != "watch" else "—",
+            "🌬️ מנוע": ("⬆ " + str((r.get("engine_flag") or {}).get("he"))
+                        if (r.get("engine_flag") or {}).get("flag") == "tailwind"
+                        else "⬇ " + str((r.get("engine_flag") or {}).get("he"))
+                        if r.get("engine_flag") else "—"),
             "why": r.get("why")} for r in pipe]), use_container_width=True,
             hide_index=True)
+        _fl_rows = [r for r in pipe if r.get("engine_flag")]
+        if _fl_rows:
+            for r in _fl_rows[:4]:
+                st.caption(f"🌬️ {r['ticker']}: "
+                           f"{(r.get('engine_flag') or {}).get('line_he')}")
+            st.caption("דגל-מנוע = הקשר תת-סקטוריאלי (פער ≥4 נק' מהתעודה "
+                       "הרחבה) — צובע עדיפות, לעולם לא שער.")
         for r in pipe:
             if r["state"] == "watch":
                 continue
