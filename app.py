@@ -1836,14 +1836,22 @@ def _story_cards(tape) -> None:
                                           if conf and conf != "None" else ""))
 
 
+def _fmt_usd(v: float | None) -> str:
+    v = float(v or 0)
+    return f"${v / 1e9:.1f}B" if v >= 1e9 else f"${v / 1e6:.0f}M"
+
+
 def _leadership_tab() -> None:
-    """Order matters (owner, 5th ask): the VERIFIABLE numbers open the tab — every figure
-    with an explicit window a user can check on Yahoo/TradingView — and only then the
-    narrative, behind a loud window-disclaimer. Trust before story."""
+    """v2 (owner 29.07): leadership is CATEGORIES, each a measured question —
+    who moves the market (contribution math), where the money concentrates
+    (turnover arena), what is compressed and explosive (springs). The engine
+    computes everything nightly; this tab only renders. The old top-RS tables
+    render ONLY while the new payload hasn't landed yet."""
     m = _latest("leadership_snapshots") or {}
     story = m.get("market_story") or {}
+    lv = m.get("leadership_v2") or {}
 
-    # 1 ── the numbers a user checks first, windows explicit, straight from the map
+    # 0 ── the index anchor a user verifies first — windows explicit
     st.markdown("#### 🔢 המדדים — יום · שבוע · חודש-מסחר")
     idx_rows = []
     for sym in ("SPY", "QQQ"):
@@ -1853,30 +1861,101 @@ def _leadership_tab() -> None:
                              "חודש-מסחר (20d) % ★": r.get("20d")})
     if idx_rows:
         st.dataframe(pd.DataFrame(idx_rows), use_container_width=True, hide_index=True)
-    secs = m.get("leading_sectors") or []
-    if secs:
-        st.markdown("**הסקטורים המובילים**")
-        st.dataframe(pd.DataFrame([{"sector": s["sector"],
-                                    "יום %": ((s.get("returns") or {}).get("1d")),
-                                    "שבוע (5d) %": ((s.get("returns") or {}).get("5d")),
-                                    "חודש-מסחר (20d) % ★":
-                                    ((s.get("returns") or {}).get("20d")),
-                                    "persistence":
-                                    (s.get("persistence") or {}).get("score"),
-                                    "trend": s.get("trend")} for s in secs]),
+    st.caption("★ חודש-מסחר = 20 ימי-מסחר ≈ חודש קלנדרי — חלון-ההחלטה של הסווינג. "
+               "יום ושבוע זהים ל-Yahoo/TradingView אחד-לאחד.")
+
+    if lv:
+        # א ── מי באמת מזיז את השוק — the contribution math, both directions
+        st.markdown("#### 🧭 מי באמת מזיז את השוק")
+        for e in lv.get("real") or []:
+            arrow = "🔺" if e.get("sign") == "up" else "🔻"
+            share = e.get("index_share")
+            head = f"{arrow} **{e.get('he')}** — משקל {e.get('cap_share')}% מהשוק"
+            if isinstance(share, (int, float)):
+                verb = "דוחף" if (e.get("index_pts") or 0) > 0 else "מושך"
+                head += (f" · {verb} {abs(share):.0f}% מתנועת המדד החודש "
+                         f"({e.get('index_pts'):+.1f} נק')")
+            st.markdown(head)
+            drv_bits = []
+            for d in e.get("drivers") or []:
+                bit = f"{d.get('ticker')} ({d.get('ret_20'):+.0f}%)"
+                sh = d.get("sector_share")
+                if isinstance(sh, (int, float)):
+                    bit += (f" — אחראית ל-{sh:.0f}% מתנועת הסקטור" if sh >= 0
+                            else " — נעה נגד כיוון הסקטור")
+                drv_bits.append(bit)
+            if drv_bits:
+                st.caption("המניות שמזיזות אותו: " + " · ".join(drv_bits))
+        if not (lv.get("real") or []):
+            st.caption("אף סקטור לא בתנועה חריגה כרגע — שוק בלי מוביל מובהק.")
+
+        # ב ── איפה הכסף מתרכז — the turnover arena's head
+        st.markdown("#### 💰 איפה הכסף מתרכז")
+        money = lv.get("money") or []
+        if money:
+            st.dataframe(pd.DataFrame(
+                [{"מניה": r.get("ticker"), "כסף ביום": _fmt_usd(r.get("adv_usd")),
+                  "% מהזירה": r.get("share_pct")} for r in money]),
+                use_container_width=True, hide_index=True)
+            st.caption(f"הזירה = {len(money)} הראשונות מתוך המניות הסחירות ביותר "
+                       f"(סה\"כ {_fmt_usd(lv.get('arena_total_usd'))} ביום). "
+                       "ריכוז כסף = תשומת-לב, לא המלצה.")
+        else:
+            st.caption("אין נתוני-מחזור הלילה.")
+
+        # ג ── קפיצים דרוכים — compressed names, magnitude never direction
+        st.markdown("#### 🌀 קפיצים דרוכים")
+        springs = lv.get("springs") or []
+        for r in springs:
+            st.markdown(f"**{r.get('ticker')}** · עוצמת-דריכה {r.get('score')}")
+            st.caption(f"{r.get('why_in')}" + (f" · ⚠️ {r['note']}" if r.get("note")
+                                               else ""))
+        if springs:
+            st.warning("קפיץ דרוך מנבא **עוצמת** מהלך, לא כיוון — המהלך יכול להיות "
+                       "לשני הצדדים. מעקב והקשר בלבד, אף פעם לא איתות קנייה.")
+        else:
+            st.caption("אין קפיצים דרוכים הלילה — הדריכות נמדדת כל לילה מחדש.")
+
+        # ד ── the operative product: the market-leaders list the map seats
+        st.markdown("#### 🦅 רשימת מובילות-השוק")
+        rows = []
+        for c in lv.get("leaders") or []:
+            src = str(c.get("src") or "")
+            origin = ("🧭 מהמפה: " + src.split(":", 1)[1]) if \
+                src.startswith("driver:") else "📈 מהדירוג הכללי"
+            rows.append({"מניה": c.get("ticker"), "מקור": origin,
+                         "חודש-מסחר %": c.get("ret_20d"),
+                         "למה": c.get("why_in")})
+        if rows:
+            st.dataframe(pd.DataFrame(rows), use_container_width=True,
+                         hide_index=True)
+            st.caption("שני מקורות, נמדדים בנפרד: 🧭 מהמפה = הסקטורים הזזים מושיבים "
+                       "את המניות שמניעות אותם; 📈 מהדירוג = חוזק-מחיר כללי.")
+    else:
+        # the old view — ONLY until tonight's run writes the v2 payload
+        st.caption("⏳ קטגוריות-ההובלה החדשות ייכתבו בריצת-הלילה הקרובה; עד אז — "
+                   "התצוגה הקודמת.")
+        secs = m.get("leading_sectors") or []
+        if secs:
+            st.markdown("**הסקטורים המובילים**")
+            st.dataframe(pd.DataFrame([{"sector": s["sector"],
+                                        "יום %": ((s.get("returns") or {}).get("1d")),
+                                        "שבוע (5d) %": ((s.get("returns") or {}).get("5d")),
+                                        "חודש-מסחר (20d) % ★":
+                                        ((s.get("returns") or {}).get("20d")),
+                                        "persistence":
+                                        (s.get("persistence") or {}).get("score"),
+                                        "trend": s.get("trend")} for s in secs]),
+                         use_container_width=True, hide_index=True)
+        st.markdown("**המניות המובילות**")
+        st.dataframe(pd.DataFrame([{"ticker": c["ticker"], "sector": c.get("sector"),
+                                    "pocket": c.get("pocket_id"),
+                                    "יום %": c.get("ret_1d"),
+                                    "שבוע (5d) %": c.get("ret_5d"),
+                                    "חודש-מסחר (20d) % ★": c.get("ret_20d"),
+                                    "stage": c.get("move_stage")}
+                                   for c in m.get("stock_leaders", [])]),
                      use_container_width=True, hide_index=True)
-    st.markdown("**המניות המובילות**")
-    st.dataframe(pd.DataFrame([{"ticker": c["ticker"], "sector": c.get("sector"),
-                                "pocket": c.get("pocket_id"),
-                                "יום %": c.get("ret_1d"),
-                                "שבוע (5d) %": c.get("ret_5d"),
-                                "חודש-מסחר (20d) % ★": c.get("ret_20d"),
-                                "stage": c.get("move_stage")}
-                               for c in m.get("stock_leaders", [])]),
-                 use_container_width=True, hide_index=True)
-    st.caption("★ חודש-מסחר = 20 ימי-מסחר ≈ חודש קלנדרי — חלון-ההחלטה של הסווינג (אופק "
-               "≤4 שבועות). יום ושבוע זהים ל-Yahoo/TradingView אחד-לאחד; ה'חודש' שלהם "
-               "קלנדרי — סטייה קטנה צפויה. עמודות ריקות מתמלאות בריצת-הלילה.")
 
     # 2 ── the narrative, ONLY after the numbers, behind an explicit window warning
     if story.get("narrative") or (m.get("tape_story") or {}).get("market_paragraph"):
