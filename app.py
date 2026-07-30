@@ -536,10 +536,36 @@ def _slots_tab() -> None:
     """מנהל-העסקאות: פוזיציות ו-P&L קודם; פסק-הדסק כרצועה (Deal Desk המלא בהרחבה —
     הערך העסקי שלו: הוא השוער שקובע אם מותר לפרוס הון היום; owner 13.07)."""
     _accrual()
-    st.caption("💼 **מה זה המסך הזה:** שולחן-העסקאות. 4 סלוטים לקניות-נייר, "
-               "מה שמחכה לאישורך מופיע עם כפתורים, והחזקות פתוחות מקבלות קריאת-"
-               "החזקה לילית. ⚪ פנוי = יש מקום, לא המלצה לקנות.  \n"
+    st.caption("💼 **מה זה המסך הזה:** שולחן-העסקאות — שלושה מסלולים (31.07): "
+               "VIP קלאסי (4 סלוטים), Lead — חצר-המובילות (2), Extreme — "
+               "קפיצים (2). ⚪ פנוי = יש מקום, לא המלצה לקנות.  \n"
                "**המסלול המלא:** 📡 רשימות ← 🚪 תור ← 👑 בדיקת-עומק ← 💼 סלוט (כאן)")
+    _pools = _latest_note("pipeline_pools") or {}
+    if _pools:
+        st.markdown("#### 🛤️ המסלולים המקבילים — Lead ו-Extreme")
+        _pc1, _pc2 = st.columns(2)
+        for _col, _pn, _he in ((_pc1, "lead", "🦅 Lead — חצר-המובילות"),
+                               (_pc2, "extreme", "⚡ Extreme — קפיצים")):
+            _pv = _pools.get(_pn) or {}
+            with _col:
+                st.markdown(f"**{_he}** · {_pv.get('open', 0)} פתוחות · "
+                            f"{_pv.get('closed', 0)} סגורות"
+                            + (f" · עודף-QQQ ממוצע "
+                               f"{_pv.get('avg_excess_vs_qqq'):+.1f}%"
+                               if _pv.get("avg_excess_vs_qqq") is not None
+                               else ""))
+                for _pr in _pv.get("open_rows") or []:
+                    _d = "🔻 שורט" if _pr.get("direction") == "short" \
+                        else "🔺 לונג"
+                    st.caption(f"{_d} **{_pr.get('ticker')}** @ "
+                               f"{_pr.get('entry')} · "
+                               f"{_pr.get('ret_pct', 0) or 0:+.1f}% · "
+                               f"סשן {_pr.get('sessions_held')}")
+                if not (_pv.get("open_rows") or []):
+                    st.caption("⚪ הבריכה במזומן — סלוט ריק הוא הצלחה, "
+                               "לא כישלון")
+        st.caption("ספרי-נייר נפרדים מ-VIP; כלל-אל-חטיפה חל; אתה מנהל-"
+                   "הסיכונים מעל כולם. מדדי-המסלולים לעולם לא מתערבבים.")
     acct = _latest("account_snapshots") or {}
     board = acct.get("slot_board") or {}
     if not board:
