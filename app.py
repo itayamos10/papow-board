@@ -1931,16 +1931,19 @@ def _leadership_tab() -> None:
         if eng_rows:
             st.markdown("#### ⚙️ לוח-המנועים — תת-הסקטורים מול הסקטורים")
             st.dataframe(pd.DataFrame(
-                [{"מנוע": f"{r.get('he')} ({r.get('etf')})",
+                [{"מנוע": ("⚡ " if r.get("dominant") else "")
+                          + f"{r.get('he')} ({r.get('etf')})",
                   "סקטור": r.get("sector_he"),
                   "מול השוק (20d) %": r.get("excess_20"),
                   "פער מהסקטור %": r.get("gap_20"),
+                  "סף-האירוע שלו": r.get("p90"),
                   "מחזור ×": r.get("turnover_x")}
                  for r in eng_rows[:12]]),
                 use_container_width=True, hide_index=True)
-            st.caption("פער מהסקטור = כמה המנוע מתנתק מהתעודה הרחבה שלו "
-                       "(חיובי = מוביל מעלה, שלילי = נשבר לבד). ממוין לפי "
-                       "עוצמת-הפער — מדד, לא המלצה.")
+            st.caption("פער מהסקטור = כמה המנוע מתנתק מהתעודה הרחבה שלו. "
+                       "⚡ דומיננטי = הפער חצה את סף-האירוע האישי של המנוע "
+                       "(מכויל מההיסטוריה שלו — פער שגרתי למנוע פרוע אינו "
+                       "אירוע). מדד, לא המלצה.")
 
         # ב ── איפה הכסף מתרכז — the turnover arena's head
         st.markdown("#### 💰 איפה הכסף מתרכז")
