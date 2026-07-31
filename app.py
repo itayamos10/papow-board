@@ -113,6 +113,25 @@ def _footer() -> None:
                 unsafe_allow_html=True)
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def _regime_streak(label: str) -> int:
+    """Consecutive nights (incl. tonight) on the same regime label."""
+    try:
+        with _engine().connect() as c:
+            rows = c.execute(text(
+                'select payload_json from "leadership_snapshots" '
+                "order by date desc limit 15")).fetchall()
+        n = 0
+        for (pj,) in rows:
+            lb = ((json.loads(pj).get("regime_v2") or {}).get("label"))
+            if str(lb) != label:
+                break
+            n += 1
+        return n
+    except Exception:
+        return 0
+
+
 def _ribbon() -> None:
     chips = []
     lead = _latest("leadership_snapshots") or {}
@@ -131,6 +150,17 @@ def _ribbon() -> None:
         chips.append(f'<span class="papow-chip {cls}">🧭 '
                      f'{_rg_he.get(str(mr.get("regime_type")), mr.get("regime_type"))}'
                      f' · {_fr_he.get(frag, frag)}</span>')
+    rg = (lead.get("regime_v2") or {})
+    if rg.get("label"):
+        # day-counter (owner 31.07: "המשטר אותו משטר" — an unchanged regime
+        # must read as a COUNTED streak, not a frozen screen)
+        streak = _regime_streak(str(rg["label"]))
+        _lb_he = {"TREND_UP": "מגמה עולה", "TREND_DOWN": "מגמה יורדת",
+                  "CHOP_LV": "דשדוש שקט", "CHOP_HV": "דשדוש עצבני",
+                  "DISLOCATION": "שבירה חדה", "MIXED": "תמונה מעורבת"}
+        chips.append(f'<span class="papow-chip">🌊 '
+                     f'{_lb_he.get(str(rg["label"]), rg["label"])}'
+                     + (f' · יום {streak}' if streak else "") + "</span>")
     eq = (acct.get("metrics") or {}).get("terminal_equity")
     if eq:
         chips.append(f'<span class="papow-chip">💼 ₪<b>{eq:,.0f}</b></span>')
@@ -1813,6 +1843,10 @@ def _watchlists_tab() -> None:
             df = pd.DataFrame(wl["members"]).rename(columns={
                 "ret_20d": "חודש-מסחר % ★", "ret_1d": "יום %", "ret_5d": "שבוע %"})
             st.dataframe(df, use_container_width=True, hide_index=True)
+        for _vp in wl.get("vip_prep") or []:       # ecosystem research: the
+            # leader's pre-declared VIP conditions (owner 31.07: paid-for LLM
+            # output must be SEEN, not archived)
+            st.caption(f"🔬 תנאי-VIP מהמחקר: {_vp}")
         typing = wl.get("typing") or {}
         filled = sum(1 for f in _typ_he
                      if typing.get(f) or (f in _top_level and wl.get(f)))
