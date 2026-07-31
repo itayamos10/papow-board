@@ -431,6 +431,15 @@ _RECOVERY = {
 
 def _operator_tab() -> None:
     from datetime import date, timedelta
+    _accrual()          # data-freshness monitor (moved from the trades tab)
+    _d0 = _latest("forward_desk_snapshots") or {}
+    _c0 = _d0.get("calibration") or {}
+    _hr0 = "—" if _c0.get("hit_rate") is None else f"{_c0['hit_rate']:.0%}"
+    st.caption(f"🧪 כיול-תחזיות (מחקר; שער-הקנייה שלו הוצא-משימוש 17.07): "
+               f"{_c0.get('n', 0)} תחזיות נבדקו · דיוק {_hr0}")
+    with st.expander("🧭 Deal Desk המלא (אבחון-מחקר)"):
+        _desk_tab()
+    st.divider()
     _mailing_list_ui()
     st.divider()
     today = date.today().isoformat()
@@ -522,8 +531,10 @@ def _operator_tab() -> None:
 
 
 
-def _notes_of(kind: str, limit: int = 12) -> list[dict]:
-    """Newest N research notes of a kind (the stories tab reads drafts)."""
+def _raw_notes_of(kind: str, limit: int = 12) -> list[dict]:
+    """Newest N notes, RAW (title/date/content) — the stories tab's drafts.
+    Renamed 31.07: this definition silently SHADOWED the cached parsed
+    _notes_of for every caller below it — the map audit caught it."""
     try:
         with _engine().connect() as c:
             rows = c.execute(text('select title, date, content from research_notes '
@@ -549,7 +560,7 @@ def _stories_tab() -> None:
                 st.markdown(str(_s0.get("body") or ""))
         st.caption(str(_ds.get("boundary_he") or ""))
         st.divider()
-    posts = _notes_of("name_post") + _notes_of("community_post")
+    posts = _raw_notes_of("name_post") + _raw_notes_of("community_post")
     posts.sort(key=lambda p0: str(p0.get("date")), reverse=True)
     if posts:
         st.markdown("### 🎯 פוסטים-של-שם (טיוטות)")
@@ -562,14 +573,65 @@ def _stories_tab() -> None:
         st.info("עוד אין סיפורים — הריצה הלילית הקרובה תייצר אותם")
 
 
+def _radar_section() -> None:
+    """🎯 על-הכוונת (owner 31.07): per pipeline, the <=2-days-to-trade names
+    with the six answers — who/doing/why/sentiment/leading/missing."""
+    _rd = _latest_note("pipeline_radar") or {}
+    if not _rd:
+        return
+    st.markdown("#### 🎯 על הכוונת — מי קרובה לעסקה")
+    st.caption(str(_rd.get("definition_he") or ""))
+    for _pk, _phe in (("vip", "👑 VIP"), ("lead", "🦅 Lead"),
+                      ("extreme", "⚡ Extreme")):
+        _pv = _rd.get(_pk) or {}
+        _cands = _pv.get("candidates") or []
+        _fs = _pv.get("free_slots")
+        st.markdown(f"**{_phe}** — {len(_cands)} על הכוונת · "
+                    f"{_fs if _fs is not None else '—'} סלוטים פנויים")
+        if not _cands:
+            st.caption("אין מועמדת בטווח-יומיים — הפייפליין צובר, לא דוחף")
+        for _c in _cands:
+            with st.expander(f"🎯 {_c.get('ticker')} — עוד "
+                             f"~{_c.get('eta_days', '?')} ימים"):
+                for _lbl, _key in (("מי היא", "who_he"),
+                                   ("מה היא עושה", "doing_he"),
+                                   ("למה מועמדת", "why_he"),
+                                   ("סנטימנט", "sentiment_he"),
+                                   ("למה מובילה", "leading_he"),
+                                   ("מה חסר לעסקה", "missing_he")):
+                    _v = str(_c.get(_key) or "").strip()
+                    if _v:
+                        st.markdown(f"- **{_lbl}:** {_v}")
+
+
+def _auto_journal_section() -> None:
+    """🧾 the AUTOMATIC trade journal (owner: the system's entries/exits,
+    not his hand) — one timeline across all three pipelines."""
+    _rd = _latest_note("pipeline_radar") or {}
+    _log = _rd.get("trade_log") or []
+    if not _log:
+        return
+    with st.expander(f"🧾 יומן-העסקאות של המערכת (אוטומטי · "
+                     f"{len(_log)} רשומות)"):
+        _act_he = {"buy": "קנייה", "sell": "מכירה", "open": "פתיחה",
+                   "close": "סגירה", "exit": "יציאה"}
+        st.dataframe(pd.DataFrame([{
+            "תאריך": r.get("when"), "מסלול": r.get("pipeline"),
+            "מניה": r.get("ticker"),
+            "פעולה": _act_he.get(str(r.get("action")), r.get("action")),
+            "מחיר": r.get("px"), "הקשר": r.get("why_he")} for r in _log]),
+            use_container_width=True, hide_index=True)
+        st.caption("נכתב אוטומטית מאירועי-המערכת — קניות/מכירות ה-VIP "
+                   "ופתיחות/סגירות הבריכות. אפס הקלדה ידנית.")
+
+
 def _slots_tab() -> None:
-    """מנהל-העסקאות: פוזיציות ו-P&L קודם; פסק-הדסק כרצועה (Deal Desk המלא בהרחבה —
-    הערך העסקי שלו: הוא השוער שקובע אם מותר לפרוס הון היום; owner 13.07)."""
-    _accrual()
-    st.caption("💼 **מה זה המסך הזה:** שולחן-העסקאות — שלושה מסלולים (31.07): "
-               "VIP קלאסי (4 סלוטים), Lead — חצר-המובילות (2), Extreme — "
-               "קפיצים (2). ⚪ פנוי = יש מקום, לא המלצה לקנות.  \n"
-               "**המסלול המלא:** 📡 רשימות ← 🚪 תור ← 👑 בדיקת-עומק ← 💼 סלוט (כאן)")
+    """הטאב העסקי (owner 31.07): שמונה סלוטים בשלוש בריכות, על-הכוונת,
+    חוזה-היום, ויומן אוטומטי — ורק זה. כלי-תפעול עברו למפעיל."""
+    st.caption("💼 **שולחן-העסקאות** — שמונה סלוטים בשלושה מסלולים: "
+               "👑 VIP (4) · 🦅 Lead (2) · ⚡ Extreme (2). "
+               "⚪ פנוי = יש מקום, לא המלצה לקנות.")
+    _radar_section()
     _pools = _latest_note("pipeline_pools") or {}
     if _pools:
         st.markdown("#### 🛤️ המסלולים המקבילים — Lead ו-Extreme")
@@ -601,54 +663,33 @@ def _slots_tab() -> None:
     if not board:
         st.info("אין עדיין לוח — הריצה הלילית תיצור אותו")
         return
-    _sa_note = _latest_note("sector_atlas") or {}
-    _mv = _sa_note.get("moving") or []
-    _secs = _sa_note.get("sectors") or {}
-    if _secs:                                  # market map strip (owner 29.07:
-        # simple display — every sector a chip, arrow = direction, gray = quiet)
-        _chips = []
-        for _sec, _e in _secs.items():
-            _he = _e.get("he") or _sec
-            if _e.get("state") == "moving":
-                _arrow = "🔺" if _e.get("sign") == "up" else "🔻"
-                _drv = ", ".join(d.get("ticker", "") for d in
-                                 (_e.get("drivers") or [])[:2])
-                _chips.append(f"**{_arrow} {_he}**" + (f" ({_drv})" if _drv else ""))
-            else:
-                _chips.append(f"<span style='color:#999'>{_he}</span>")
-        st.markdown("🗺️ **מפת-השוק:** " + " · ".join(_chips),
-                    unsafe_allow_html=True)
-        st.caption("🔺 זז-מעלה · 🔻 זז-מטה (בסוגריים: המניות שמניעות) · "
-                   "אפור = שקט. סקטור נכנס למפה רק אחרי לילה שני של אישוש.")
-    _ds = board.get("day_stories") or {}
-    if _ds.get("stories"):                       # 📰 day stories (owner 28.07: "למה
-        # אני לא מקבל את סיפור היום גם במערכת?") — the same bundle the night mail
-        # carries, rendered at the top of the board
-        st.markdown(f"#### 📰 סיפורי היום — {_ds.get('one_liner', '')}")
-        _lead = _ds["stories"][0]
-        st.markdown(f"**{_lead.get('title')}**")
-        st.markdown(str(_lead.get("body") or ""))
-        with st.expander("כל סיפורי-היום"):
-            for _s0 in _ds["stories"][1:]:
-                st.markdown(f"**{_s0.get('title')}**")
-                st.markdown(str(_s0.get("body") or ""))
-            st.caption(str(_ds.get("boundary_he") or ""))
+    # market-map strip -> Lead/regime tabs; day stories -> the stories tab
+    # (owner 31.07: "להוריד מכאן כל מה שלא רלוונטי לעסקה")
     _rc = _latest_note("regime_contract") or {}
     _cn, _st = (_rc.get("contract") or {}), (_rc.get("structure") or {})
     if _cn:
         _lq, _ex, _ck = (_cn.get("liquidity") or {}), (_cn.get("exit") or {}), (_cn.get("clocks") or {})
         _sp = _cn.get("structure") or {}
-        st_ico = "🟢" if _cn.get("may_trade_long") else "🔴"
-        st.markdown(f"#### {st_ico} חוזה-היום: {_cn.get('label')} · {_sp.get('posture')}")
+        _lb_he = {"TREND_UP": "מגמה עולה", "TREND_DOWN": "מגמה יורדת",
+                  "CHOP_LV": "דשדוש שקט", "CHOP_HV": "דשדוש עצבני",
+                  "DISLOCATION": "שבירה חדה", "MIXED": "תמונה מעורבת"}
+        _ok = bool(_cn.get("may_trade_long"))
+        st.markdown("#### 📜 חוזה-היום — התנאים שהמשטר מכתיב")
+        (st.success if _ok else st.error)(
+            ("🟢 **מותר לפתוח לונגים היום** — עד "
+             f"{_sp.get('max_new_longs')} חדשים" if _ok else
+             "🔴 **אסור לפתוח לונגים היום** — המשטר חוסם סיכון חדש")
+            + f" · משטר: {_lb_he.get(str(_cn.get('label')), _cn.get('label'))}")
+        st.markdown(
+            f"- **שעונים:** הבשלה {_ck.get('maturation_days')} ימים + עומק "
+            f"{_ck.get('deep_days')} ימים\n"
+            f"- **נזילות:** דרגה {_lq.get('tier')} · גודל-פוזיציה "
+            f"×{_lq.get('size_factor')}\n"
+            f"- **יציאה:** פרופיל {_ex.get('profile')} · סטופ "
+            f"{_ex.get('stop_pct')}% · תקרת-זמן {_ex.get('time_cap_days')} ימים"
+            + (" · חיתוך-יום-3 פעיל" if _ex.get("cut_day3") else ""))
         if _st.get("read_he"):
-            st.caption("📐 " + str(_st["read_he"]))
-        st.caption(
-            f"לונגים חדשים מותרים: **{_sp.get('max_new_longs')}** · "
-            f"שעונים: הבשלה {_ck.get('maturation_days')} + עומק {_ck.get('deep_days')} · "
-            f"נזילות {_lq.get('tier')} (גודל ×{_lq.get('size_factor')}) · "
-            f"יציאה {_ex.get('profile')}: סטופ {_ex.get('stop_pct')}% · "
-            f"תקרה {_ex.get('time_cap_days')}י"
-            + (" · חיתוך-יום-3" if _ex.get("cut_day3") else ""))
+            st.caption("📐 מבנה-השוק: " + str(_st["read_he"]))
         if _sp.get("he"):
             st.caption("🧭 " + str(_sp["he"]))
     _ei = _latest_note("entry_intents") or {}
@@ -674,17 +715,10 @@ def _slots_tab() -> None:
         st.caption(f"🕒 **דופק-ביניים {_pl.get('time_utc')}Z** "
                    f"(עיכוב {_pl.get('delay_min')} דק׳): {_rows}  \n"
                    "_תצוגה בלבד — ההחלטות נופלות על נתוני-הסגירה בריצת-הלילה_")
-    d = _latest("forward_desk_snapshots") or {}
-    r0, c0 = d.get("readiness") or {}, d.get("calibration") or {}
-    hr = "—" if c0.get("hit_rate") is None else f"{c0['hit_rate']:.0%}"
-    st.markdown(f'<div class="papow-card"><b>🧪 כיול-תחזיות (מחקר, לא שער-קנייה):</b> '
-                f'{c0.get("n", 0)} תחזיות-כיוון נבדקו · דיוק {hr}'
-                f'<div class="sub">מודד את חדות-הקריאות שלנו לאורך זמן. קניות-הנייר '
-                f'עוברות דרך מפתח-כפול (בדיקת-עומק + אישור-מטרי) ווטו-משטר — לא דרך '
-                f'המספר הזה. סלוט "🟢 מוכן" = יש מקום פנוי, לא המלצה לקנות.</div></div>',
-                unsafe_allow_html=True)
-    with st.expander("🧭 מנוע-הקצב המלא (Deal Desk)"):
-        _desk_tab()
+    _auto_journal_section()
+    # forecast-calibration card + the Deal-Desk expander ("מנוע-הקצב") moved
+    # to the operator tab (owner 31.07): its buy-gate was retired 17.07 —
+    # research diagnostics, not business content
     # MANAGER-APPROVAL GATE (owner 13.07): no slot fills without an explicit yes here.
     # The card carries EVERYTHING a decision needs (owner: synthesis of the whole
     # process + both engines + bottom line) and reflects YOUR click immediately.
