@@ -1243,7 +1243,7 @@ _IDEA_ST_HE = {"PENDING_APPROVAL": "🟡 ממתין לאישורך", "APPROVED":
 def _ideas_intro() -> None:
     st.caption("💡 **מה זה המסך הזה:** רעיונות-ניסוי — כמה פרשנויות מתחרות לאותה "
                "תופעה בשוק, שנמדדות זו מול זו על נתונים אמיתיים. רעיון שמנצח "
-               "במדידה הופך לגרעין קבוע (לשונית «גרעינים»); רעיון שמופרך נסגר "
+               "במדידה הופך לגרעין קבוע (לשונית «🧪 מחולל-תזות»); רעיון שמופרך נסגר "
                "בכבוד עם כל הלקחים. אתה מאשר/דוחה כל רעיון לפני שהוא רץ.")
 
 
@@ -1325,7 +1325,7 @@ def _ideas_tab() -> None:
                            "השורה הזו מתעדכנת כל לילה")
         elif s.get("evidence"):
             st.caption("· הראיות לעיל = מרגע פתיחת-הסיטואציה, לא מתעדכנות יומית — "
-                       "המצב העדכני של הסל בלשונית «🧬 גרעינים»")
+                       "המצב העדכני של הסל בלשונית «🧪 מחולל-תזות»")
         group = [i for i in ideas if i.get("situation_id") == s.get("situation_id")]
         _ord = {"PENDING_APPROVAL": 0, "DRAFT": 0, "APPROVED": 1, "RETURNED": 2}
         group.sort(key=lambda i0: _ord.get(str(i0.get("status")), 3))
@@ -1571,7 +1571,7 @@ def _vip_queue_tab() -> None:
                 if r.get("prior"):
                     st.caption("סטטיסטיקת-עבר של התבנית (על מדגם היסטורי, "
                                f"לא תחזית): {r['prior']}")
-    st.caption("🧬 הגרעינים (התזות) עברו ללשונית משלהם — «גרעינים» — שם רואים כל רעיון, הסל שלו ומצב-ההתעוררות.")
+    st.caption("🧬 הגרעינים (התזות) עברו ללשונית «🧪 מחולל-תזות» — שם רואים כל רעיון, הסל שלו ומצב-ההתעוררות.")
     ev = q.get("events_today") or []
     _CODE_HE = {
         "orphaned_high_readiness": "מוכנה-לסחר אבל בלי רשימה אחראית — נשלחה לחקר",
@@ -1859,11 +1859,24 @@ def _desk_tab() -> None:
         st.dataframe(pd.DataFrame(ns), use_container_width=True, hide_index=True)
 
 
+_LIST_PIPELINE = {"Market Leaders": "lead", "Leader-Connected": "lead",
+                  "Leader Court": "lead", "Loaded Springs": "extreme"}
+_PIPE_HE = {"vip": "👑 מזינות את VIP", "lead": "🦅 מזינות את Lead",
+            "extreme": "⚡ מזינות את Extreme"}
+
+
 def _watchlists_tab() -> None:
     w = _latest("watchlist_snapshots") or {}
-    st.caption("★ חודש-מסחר = 20 ימי-מסחר ≈ חודש קלנדרי — חלון-ההחלטה של הסווינג "
-               "(מול Yahoo/TradingView: יום/שבוע זהים; 'חודש' אצלם קלנדרי — סטייה קטנה "
-               "צפויה).")
+    st.caption("📡 **המודול האופרטיבי ביותר** — הרשימות הן המזין של שלושת "
+               "הפייפליינים. כל רשימה מסודרת תחת הפייפליין שלה, ובכל אחת: "
+               "**תנאי-ההעפלה** — מה המניה צריכה לעשות כדי לעלות ממעקב "
+               "לפייפליין.  \n★ חודש-מסחר = 20 ימי-מסחר.")
+    _by_pipe: dict[str, list[dict]] = {"vip": [], "lead": [], "extreme": []}
+    for wl0 in w.get("watchlists", []):
+        _by_pipe[_LIST_PIPELINE.get(str(wl0.get("kind")), "vip")].append(wl0)
+    w = {"watchlists": [x for p in ("vip", "lead", "extreme")
+                        for x in ([{"_pipe_header": p}] + _by_pipe[p]
+                                  if _by_pipe[p] else [])]}
     _typ_he = {"provenance": "מקור", "basis": "בסיס ראייתי", "purpose": "משפט-החלטה",
                "feed": "הזנה", "entry": "תנאי-כניסה", "maturation": "הבשלה",
                "decision_window": "חלון-החלטה", "expiry": "פקיעה",
@@ -1871,8 +1884,14 @@ def _watchlists_tab() -> None:
                "resistance": "התנגדות"}
     _top_level = ("provenance", "basis", "purpose", "measurement_hook")
     for wl in w.get("watchlists", []):
+        if wl.get("_pipe_header"):
+            st.markdown(f"### {_PIPE_HE[str(wl['_pipe_header'])]}")
+            continue
         st.markdown(f"**[{wl.get('provenance')}·{wl.get('basis')}] {wl.get('kind')}** — "
                     f"{wl.get('purpose')}")
+        _mat = (wl.get("typing") or {}).get("maturation")
+        if _mat:
+            st.caption(f"🪜 **תנאי-ההעפלה:** {_mat}")
         if wl.get("members"):
             df = pd.DataFrame(wl["members"]).rename(columns={
                 "ret_20d": "חודש-מסחר % ★", "ret_1d": "יום %", "ret_5d": "שבוע %"})
@@ -1958,18 +1977,43 @@ def _leadership_tab() -> None:
     # standalone note (written the same night the code shipped) fills in
     lv = m.get("leadership_v2") or _latest_note("leadership_v2") or {}
 
-    # 0 ── the index anchor a user verifies first — windows explicit
-    st.markdown("#### 🔢 המדדים — יום · שבוע · חודש-מסחר")
-    idx_rows = []
-    for sym in ("SPY", "QQQ"):
-        r = (story.get(sym) or {}).get("returns") or {}
-        if r:
-            idx_rows.append({"": sym, "יום %": r.get("1d"), "שבוע (5d) %": r.get("5d"),
-                             "חודש-מסחר (20d) % ★": r.get("20d")})
-    if idx_rows:
-        st.dataframe(pd.DataFrame(idx_rows), use_container_width=True, hide_index=True)
-    st.caption("★ חודש-מסחר = 20 ימי-מסחר ≈ חודש קלנדרי — חלון-ההחלטה של הסווינג. "
-               "יום ושבוע זהים ל-Yahoo/TradingView אחד-לאחד.")
+    # the index anchor moved to the regime tab (owner 31.07 redesign) —
+    # this tab is the LEAD PIPELINE: its decision tree, then its context
+    st.caption("**עץ-ההחלטה של הפייפליין:** מדד-ההשפעה מזהה מי באמת מזיז "
+               "את השוק ← ותק 7/10 לילות = מובילה יציבה ← נבנית לה חצר "
+               "(קורלציה 0.65-0.8 + מחקר-אקוסיסטם) ← **הצתה = נסיגת-המובילה "
+               "מתחת ל-90% משיא-60** ← כניסה בלילות 1-3 בלבד (+12.7% חציוני "
+               "במחקר; החלון מת בלילה 4) ← סטופ −8% · יציאה ב-25 סשנים · "
+               "הימור אחד לכל חצר.")
+    _rd_l = _latest_note("pipeline_radar") or {}
+    for _c in (_rd_l.get("lead") or {}).get("candidates") or []:
+        st.markdown(f"**🎯 {_c.get('ticker')}** ← {_c.get('leading_he')}")
+        st.caption(f"{_c.get('why_he')} · {_c.get('missing_he')}")
+    _pools_l = _latest_note("pipeline_pools") or {}
+    _lv0 = _pools_l.get("lead") or {}
+    st.markdown(f"#### 💼 הבריכה — {_lv0.get('open', 0)} פתוחות · "
+                f"{_lv0.get('closed', 0)} סגורות"
+                + (f" · עודף-QQQ {_lv0.get('avg_excess_vs_qqq'):+.1f}%"
+                   if _lv0.get("avg_excess_vs_qqq") is not None else ""))
+    for _pr in _lv0.get("open_rows") or []:
+        st.caption(f"🔺 **{_pr.get('ticker')}** @ {_pr.get('entry')} · "
+                   f"{_pr.get('ret_pct', 0) or 0:+.1f}% · "
+                   f"סשן {_pr.get('sessions_held')}/25")
+    _wl0 = _latest("watchlist_snapshots") or {}
+    _crt = next((w for w in _wl0.get("watchlists") or []
+                 if w.get("kind") == "Leader Court"), None)
+    if _crt:
+        st.markdown("#### 🏰 חצר-המובילות הלילה")
+        st.caption(str(_crt.get("filter") or ""))
+        st.dataframe(pd.DataFrame([{
+            "מניה": m0.get("ticker"), "מובילה": m0.get("leader"),
+            "קורלציה": m0.get("corr"),
+            "🚨": "כן" if m0.get("attention_he") else "",
+            "למה": m0.get("why_in")} for m0 in _crt.get("members") or []]),
+            use_container_width=True, hide_index=True)
+        for _vp in _crt.get("vip_prep") or []:
+            st.caption(f"🔬 תנאי-VIP מהמחקר: {_vp}")
+    st.markdown("---\n**ההקשר: מי באמת מזיז את השוק (מדד-ההשפעה)**")
 
     if lv:
         # א ── מי באמת מזיז את השוק — the contribution math, both directions
@@ -2107,68 +2151,8 @@ def _leadership_tab() -> None:
                                    for c in m.get("stock_leaders", [])]),
                      use_container_width=True, hide_index=True)
 
-    # 2 ── the narrative, ONLY after the numbers, behind an explicit window warning
-    if story.get("narrative") or (m.get("tape_story") or {}).get("market_paragraph"):
-        st.markdown("#### 📰 הסיפור")
-        st.warning("⚠️ מספר בסיפור שלמטה בלי תווית-חלון מפורשת = **חודש-מסחר (20 ימי "
-                   "מסחר)**, לא יום ולא שבוע. לאימות מהיר — הטבלאות שלמעלה.")
-    tape = m.get("tape_story") or {}
-    if tape.get("market_paragraph"):
-        st.info(tape["market_paragraph"])
-        if tape.get("stocks_paragraph"):
-            st.info(tape["stocks_paragraph"])
-        led = tape.get("alignment_ledger") or {}
-        if led.get("n_assets"):
-            st.caption(f"מאזן: {led.get('confirmed', 0)} מגובי-חדשות · "
-                       f"{led.get('contradicted', 0)} בניגוד · "
-                       f"{led.get('no_news_move', 0)} בלי סיפור — היפותזה פתוחה, הקשר בלבד")
-        _story_cards(tape)
-    if story.get("narrative"):
-        st.caption(story["narrative"])
-    rg = m.get("regime_v2") or {}
-    if rg.get("read_he"):
-        st.info("🌊 " + str(rg["read_he"]))
-        if rg.get("qual_note_he"):
-            st.caption(str(rg["qual_note_he"]))
-    # money flows + the behavioral third lens (owner 13.07: depth belongs here)
-    st.markdown("#### 💸 זרימות-הכסף והעדשה-ההתנהגותית")
-    flows = []
-    for key, icon in (("locomotive_mix", "🚂"), ("sector_rotation", "🔄"),
-                      ("smart_money_pulse", "🫀")):
-        blk = m.get(key) or {}
-        if blk.get("read_he"):
-            flows.append(f"- {icon} {blk['read_he']}")
-    if flows:
-        st.markdown("\n".join(flows))
-    else:
-        st.caption("אין קריאות-זרימה במפה הנוכחית.")
-    beh = _latest_note("behavior_states")
-    if beh:
-        tally: dict[str, int] = {}
-        chips = []
-        for t, states in list(beh.items())[:40]:
-            if not isinstance(states, list):
-                continue
-            names = [s.get("state") if isinstance(s, dict) else str(s) for s in states]
-            for n0 in names:
-                tally[str(n0)] = tally.get(str(n0), 0) + 1
-            if names and len(chips) < 8:
-                chips.append(f'<span class="papow-chip cyan">🧬 {t}: '
-                             + " · ".join(_BEHAV_HE.get(str(x), str(x))
-                                          for x in names[:2]) + "</span>")
-        if tally:
-            st.markdown("**תצפיות-התנהגות הלילה:** " + " · ".join(
-                f"{_BEHAV_HE.get(k, k)}×{v}"
-                for k, v in sorted(tally.items(), key=lambda x: -x[1])[:5]))
-        if chips:
-            st.markdown('<div class="papow-ribbon">' + "".join(chips) + "</div>",
-                        unsafe_allow_html=True)
-        st.caption("עדשה-שלישית, תצפית בלבד — המתאם בינה לבין זרימות-הכסף נמדד ביומן "
-                   "(וקטור עצמאי); טרם נקבעה סיבתיות ולא נבנה ממנה שער.")
-    else:
-        st.caption("🧬 אין עדיין note-התנהגות — נכתב בריצה הלילית.")
-    for k, v in (m.get("caveats") or {}).items():
-        st.caption(f"⚠️ {k}: {v}")
+    # tape narrative / regime read / flows / behavior lens / caveats moved
+    # to the 🌊 regime tab (owner 31.07: leadership tab = the Lead pipeline)
 
 
 def _improvement_tab() -> None:
@@ -2335,7 +2319,7 @@ def _decision_strip() -> None:
                    and str(r.get("owner_decision") or "PENDING") == "PENDING")
         if n_th:
             items.append(f"🧪 {n_th} רעיונות-מחקר בציון גבוה — לאשר/לדחות "
-                         "בלשונית «🧬 גרעינים»")
+                         "בלשונית «🧪 מחולל-תזות»")
         n_open = sum(1 for i in tr.get("queue") or [] if i.get("status") == "OPEN")
         if n_open:
             fyi.append(f"🔎 {n_open} חקירות רצות ברקע (אין פעולה שלך)")
@@ -2344,7 +2328,7 @@ def _decision_strip() -> None:
                       if str(i.get("status")) in ("DRAFT", "PENDING_APPROVAL"))
         if n_cards:
             items.append(f"💡 {n_cards} רעיונות עם כפתור אשר/דחה — "
-                         "לשונית «💡 רעיונות»")
+                         "לשונית «🧪 מחולל-תזות»")
         vb = _latest_note("vip_board") or {}
         fx = (vb.get("funnels") or {}).get("context_discovery") or {}
         if fx.get("direct_vip_entries"):
@@ -2372,32 +2356,190 @@ def _decision_strip() -> None:
                    + " — המערכת תעצור רק כשתצטרך להכריע.")
 
 
+def _vip_pipeline_tab() -> None:
+    """👑 VIP — the widest pipeline, ONE ordered decision process (owner
+    31.07): bottom line first, then the tree, then the full queue."""
+    q = _latest_note("vip_board") or {}
+    cap = q.get("capacity") or {}
+    members = q.get("members") or []
+    at_decision = [m for m in members
+                   if "החלטה" in str(m.get("next_step_he") or "")
+                   or str(m.get("status")) == "DECISION_READY"]
+    acct0 = _latest("account_snapshots") or {}
+    ready0 = (acct0.get("slot_board") or {}).get("ready_slots")
+    st.markdown("#### 👑 השורה התחתונה")
+    st.info(f"**{len(at_decision)} מוכרעות הערב** ({', '.join(str(m0.get('ticker')) for m0 in at_decision[:6]) or '—'}) · "
+            f"בעומק/VIP: {cap.get('vip', '—')} · עומק {cap.get('deep', '—')} · "
+            f"סלוטים פנויים: {ready0 if ready0 is not None else '—'}")
+    st.caption("**עץ-ההחלטה של הפייפליין:** 📡 רשימה מזינה ← שערי-מועמדות "
+               "(נפח/שלב/חוזק) ← כניסה ל-VIP (ותק+תפקיד-רשימה) ← 3 ימי "
+               "ניתוח-עומק (מנוע מטרי + מנוע איכותני) ← **חוק שני-המפתחות**: "
+               "קנייה רק כששניהם עוברים יחד ← אישור-מנהל ← סלוט. "
+               "בכל שלב No-Trade הוא תוצאה לגיטימית.")
+    st.divider()
+    _vip_tab()
+    st.divider()
+    st.markdown("#### 🚪 התור המלא — מי בדרך פנימה ולמה")
+    _vip_queue_tab()
+
+
+def _extreme_pipeline_tab() -> None:
+    """⚡ Extreme — asymmetry: armed springs, release triggers, tickets,
+    the pool — and the containment that keeps it honest."""
+    st.caption("**עץ-ההחלטה של הפייפליין:** 🌀 רשימת-הקפיצים (צירוף דחיסה × "
+               "לחץ-שורט, ציון ≥0.55) ← חימוש-לילי עם טווח-הדחיסה ← סגירה "
+               "מחוץ לטווח ±2% = **כרטיס עם השבירה** (לונג בפריצה / שורט "
+               "בשבירה) ← סטופ בצד השני של הטווח (עד 8%) ← יציאה כפויה תוך "
+               "4 סשנים. מקסימום 2 כרטיסים ללילה; ספר-נייר נפרד.")
+    _rd = _latest_note("pipeline_radar") or {}
+    for _c in (_rd.get("extreme") or {}).get("candidates") or []:
+        st.markdown(f"**🎯 {_c.get('ticker')}** — {_c.get('doing_he')}")
+        st.caption(f"הטריגר: {_c.get('missing_he')}")
+    _tk = _latest_note("extreme_tickets") or []
+    if isinstance(_tk, list) and _tk:
+        st.markdown("#### ⚡ כרטיסים פעילים")
+        for _t0 in _tk:
+            st.warning(f"**{_t0.get('ticker')} — "
+                       f"{'לונג' if _t0.get('direction') == 'long' else 'שורט'}"
+                       f"** @ {_t0.get('entry_ref')} · סטופ {_t0.get('stop')} "
+                       f"({_t0.get('risk_pct')}%) · עד "
+                       f"{_t0.get('time_cap_sessions')} סשנים\n\n"
+                       f"{_t0.get('why_he')}")
+    _pools = _latest_note("pipeline_pools") or {}
+    _ev = _pools.get("extreme") or {}
+    st.markdown(f"#### 💼 הבריכה — {_ev.get('open', 0)} פתוחות · "
+                f"{_ev.get('closed', 0)} סגורות"
+                + (f" · עודף-QQQ {_ev.get('avg_excess_vs_qqq'):+.1f}%"
+                   if _ev.get("avg_excess_vs_qqq") is not None else ""))
+    for _pr in _ev.get("open_rows") or []:
+        st.caption(f"{'🔻' if _pr.get('direction') == 'short' else '🔺'} "
+                   f"**{_pr.get('ticker')}** @ {_pr.get('entry')} · "
+                   f"{_pr.get('ret_pct', 0) or 0:+.1f}% · "
+                   f"סשן {_pr.get('sessions_held')}/4")
+    if not (_ev.get("open_rows") or []):
+        st.caption("⚪ במזומן — קפיץ שלא נשבר אינו עסקה")
+    # the springs list itself (context: what is armed for tomorrow)
+    _w = _latest("watchlist_snapshots") or {}
+    _sp = next((w for w in _w.get("watchlists") or []
+                if w.get("kind") == "Loaded Springs"), None)
+    if _sp and _sp.get("members"):
+        st.markdown("#### 🌀 הקפיצים החמושים למחר")
+        st.dataframe(pd.DataFrame([{
+            "מניה": m0.get("ticker"), "ציון": m0.get("score"),
+            "טווח-הדחיסה": f"{m0.get('range_lo')}–{m0.get('range_hi')}",
+            "למה": m0.get("why_in")} for m0 in _sp["members"]]),
+            use_container_width=True, hide_index=True)
+        st.caption("קפיץ מנבא עוצמה, לא כיוון — הכרטיס נולד רק מהשבירה. "
+                   "פידים נוספים (Gap-Holds, Pocket-Pivots) נדחו בבקטסט "
+                   "31.07 ויחזרו רק עם וריאנט שיוכיח.")
+
+
+def _regime_tab() -> None:
+    """🌊 משטר-השוק — the cross-cutting environment every pipeline consumes:
+    regime read + contract, market structure, flows, behavior, narrative."""
+    m = _latest("leadership_snapshots") or {}
+    story = m.get("market_story") or {}
+    rg = m.get("regime_v2") or {}
+    if rg.get("read_he"):
+        streak = _regime_streak(str(rg.get("label") or ""))
+        st.markdown(f"#### 🌊 {rg['read_he']}"
+                    + (f" · יום {streak} במשטר" if streak else ""))
+        if rg.get("qual_note_he"):
+            st.caption(str(rg["qual_note_he"]))
+    _rc = _latest_note("regime_contract") or {}
+    _cn, _stc = (_rc.get("contract") or {}), (_rc.get("structure") or {})
+    if _cn:
+        st.caption(f"📜 החוזה שנגזר: {_cn.get('action_he') or ''}")
+        if _stc.get("read_he"):
+            st.caption("📐 " + str(_stc["read_he"]))
+    st.markdown("#### 🔢 המדדים — יום · שבוע · חודש-מסחר")
+    idx_rows = []
+    for sym in ("SPY", "QQQ"):
+        r = (story.get(sym) or {}).get("returns") or {}
+        if r:
+            idx_rows.append({"": sym, "יום %": r.get("1d"),
+                             "שבוע (5d) %": r.get("5d"),
+                             "חודש-מסחר (20d) % ★": r.get("20d")})
+    if idx_rows:
+        st.dataframe(pd.DataFrame(idx_rows), use_container_width=True,
+                     hide_index=True)
+    tape = m.get("tape_story") or {}
+    if tape.get("market_paragraph"):
+        st.markdown("#### 📰 קריאת-הטייפ")
+        st.info(tape["market_paragraph"])
+        if tape.get("stocks_paragraph"):
+            st.info(tape["stocks_paragraph"])
+        led = tape.get("alignment_ledger") or {}
+        if led.get("n_assets"):
+            st.caption(f"מאזן: {led.get('confirmed', 0)} מגובי-חדשות · "
+                       f"{led.get('contradicted', 0)} בניגוד · "
+                       f"{led.get('no_news_move', 0)} בלי סיפור")
+        _story_cards(tape)
+    st.markdown("#### 💸 זרימות-הכסף והעדשה-ההתנהגותית")
+    flows = []
+    for key, icon in (("locomotive_mix", "🚂"), ("sector_rotation", "🔄"),
+                      ("smart_money_pulse", "🫀")):
+        blk = m.get(key) or {}
+        if blk.get("read_he"):
+            flows.append(f"- {icon} {blk['read_he']}")
+    if flows:
+        st.markdown("\n".join(flows))
+    beh = _latest_note("behavior_states")
+    if beh:
+        tally: dict[str, int] = {}
+        for t, states in list(beh.items())[:40]:
+            if isinstance(states, list):
+                for s0 in states:
+                    n0 = s0.get("state") if isinstance(s0, dict) else str(s0)
+                    tally[str(n0)] = tally.get(str(n0), 0) + 1
+        if tally:
+            st.markdown("**תצפיות-התנהגות הלילה:** " + " · ".join(
+                f"{_BEHAV_HE.get(k, k)}×{v}"
+                for k, v in sorted(tally.items(), key=lambda x: -x[1])[:5]))
+        st.caption("עדשה-שלישית, תצפית בלבד — לא שער.")
+    for k, v in (m.get("caveats") or {}).items():
+        st.caption(f"⚠️ {k}: {v}")
+
+
+def _thesis_tab() -> None:
+    """🧪 מחולל-התזות — nuclei + ideas as ONE birth→maturation flow (owner
+    31.07). v1 board merge; auto-approval lands with the engine change."""
+    st.caption("**המסלול:** תנועה קבוצתית לא-מוסברת / גלאי-רעיונות ← חקירה "
+               "← תזה מדורגת ← הפעלה ← רשימות-סל ← מועמדות לפייפליין. "
+               "אפקטיביות תימדד בכמה שמות העפילו ולכמה עסקאות; תזה בלי "
+               "מועמדת חודשיים — פורשת.")
+    _nuclei_tab()
+    st.divider()
+    _ideas_tab()
+
+
 def main() -> None:
     _gate()
     _hero()
     _ribbon()
     _decision_strip()
-    # order = the owner's working process (RTL: first renders rightmost): the deal
-    # manager and VIP first, the entry queue beside them, context next, ops last.
-    tabs = st.tabs(["💼 עסקאות", "👑 VIP", "🚪 תור-VIP", "📰 סיפורים",
-                    "🧬 גרעינים", "💡 רעיונות", "🦅 הובלה",
-                    "📡 רשימות", "🚦 מפעיל", "🛠 שיפורים", "📖 אוזבקי"])
+    # order = the owner's 31.07 redesign: the business tab first, then the
+    # three pipelines, the regime environment, the feeder lists, the thesis
+    # generator, stories — ops/improvements/ozbeki last (backlogged).
+    tabs = st.tabs(["💼 עסקאות", "👑 VIP", "🦅 Lead", "⚡ Extreme",
+                    "🌊 משטר-שוק", "📡 רשימות", "🧪 מחולל-תזות",
+                    "📰 סיפורים", "🚦 מפעיל", "🛠 שיפורים", "📖 אוזבקי"])
     with tabs[0]:
         _slots_tab()
     with tabs[1]:
-        _vip_tab()
+        _vip_pipeline_tab()
     with tabs[2]:
-        _vip_queue_tab()
-    with tabs[3]:
-        _stories_tab()
-    with tabs[4]:
-        _nuclei_tab()
-    with tabs[5]:
-        _ideas_tab()
-    with tabs[6]:
         _leadership_tab()
-    with tabs[7]:
+    with tabs[3]:
+        _extreme_pipeline_tab()
+    with tabs[4]:
+        _regime_tab()
+    with tabs[5]:
         _watchlists_tab()
+    with tabs[6]:
+        _thesis_tab()
+    with tabs[7]:
+        _stories_tab()
     with tabs[8]:
         _operator_tab()
     with tabs[9]:
