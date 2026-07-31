@@ -632,37 +632,46 @@ def _slots_tab() -> None:
                "👑 VIP (4) · 🦅 Lead (2) · ⚡ Extreme (2). "
                "⚪ פנוי = יש מקום, לא המלצה לקנות.")
     _radar_section()
-    _pools = _latest_note("pipeline_pools") or {}
-    if _pools:
-        st.markdown("#### 🛤️ המסלולים המקבילים — Lead ו-Extreme")
-        _pc1, _pc2 = st.columns(2)
-        for _col, _pn, _he in ((_pc1, "lead", "🦅 Lead — חצר-המובילות"),
-                               (_pc2, "extreme", "⚡ Extreme — קפיצים")):
-            _pv = _pools.get(_pn) or {}
-            with _col:
-                st.markdown(f"**{_he}** · {_pv.get('open', 0)} פתוחות · "
-                            f"{_pv.get('closed', 0)} סגורות"
-                            + (f" · עודף-QQQ ממוצע "
-                               f"{_pv.get('avg_excess_vs_qqq'):+.1f}%"
-                               if _pv.get("avg_excess_vs_qqq") is not None
-                               else ""))
-                for _pr in _pv.get("open_rows") or []:
-                    _d = "🔻 שורט" if _pr.get("direction") == "short" \
-                        else "🔺 לונג"
-                    st.caption(f"{_d} **{_pr.get('ticker')}** @ "
-                               f"{_pr.get('entry')} · "
-                               f"{_pr.get('ret_pct', 0) or 0:+.1f}% · "
-                               f"סשן {_pr.get('sessions_held')}")
-                if not (_pv.get("open_rows") or []):
-                    st.caption("⚪ הבריכה במזומן — סלוט ריק הוא הצלחה, "
-                               "לא כישלון")
-        st.caption("ספרי-נייר נפרדים מ-VIP; כלל-אל-חטיפה חל; אתה מנהל-"
-                   "הסיכונים מעל כולם. מדדי-המסלולים לעולם לא מתערבבים.")
     acct = _latest("account_snapshots") or {}
     board = acct.get("slot_board") or {}
     if not board:
         st.info("אין עדיין לוח — הריצה הלילית תיצור אותו")
         return
+    # ── THE HOUSE BOARD: all 8 slots, one grid, split by pipeline ──────
+    _pools = _latest_note("pipeline_pools") or {}
+    _vip_slots = [s for s in (board.get("slots") or [])
+                  if s.get("state") != "research"]
+    _res_n = len([s for s in board.get("slots") or []
+                  if s.get("state") == "research"])
+    st.markdown("#### 🏠 לוח-הבית — שמונת הסלוטים")
+    _cols = st.columns(3)
+    _specs = [
+        ("👑 VIP", 4, [{"ticker": s.get("ticker"), "entry": s.get("entry_price"),
+                        "ret_pct": s.get("pnl_pct"),
+                        "sessions_held": s.get("days_held"),
+                        "direction": "long"}
+                       for s in _vip_slots if s.get("ticker")],
+         f"סווינג קלאסי · {_res_n} במחקר-צינון" if _res_n else "סווינג קלאסי"),
+        ("🦅 Lead", 2, (_pools.get("lead") or {}).get("open_rows") or [],
+         "חצר-מובילות · יציאה ב-25 סשנים"),
+        ("⚡ Extreme", 2, (_pools.get("extreme") or {}).get("open_rows") or [],
+         "קפיצים · יציאה כפויה ב-4 סשנים"),
+    ]
+    for _col, (_he, _cap, _rows, _sub) in zip(_cols, _specs, strict=False):
+        with _col:
+            st.markdown(f"**{_he}** — {len(_rows)}/{_cap} תפוסים")
+            st.caption(_sub)
+            for _r in _rows:
+                _dir = "🔻" if _r.get("direction") == "short" else "🔺"
+                _pnl = _r.get("ret_pct")
+                st.markdown(f"{_dir} **{_r.get('ticker')}** @ "
+                            f"{_r.get('entry')}"
+                            + (f" · {_pnl:+.1f}%" if _pnl is not None else "")
+                            + (f" · יום {_r.get('sessions_held')}"
+                               if _r.get("sessions_held") is not None else ""))
+            for _ in range(max(0, _cap - len(_rows))):
+                st.caption("⚪ פנוי")
+    st.caption("סלוט ריק הוא הצלחה, לא כישלון · ספרים נפרדים, כלל-אל-חטיפה חל.")
     # market-map strip -> Lead/regime tabs; day stories -> the stories tab
     # (owner 31.07: "להוריד מכאן כל מה שלא רלוונטי לעסקה")
     _rc = _latest_note("regime_contract") or {}
@@ -916,13 +925,35 @@ def _slots_tab() -> None:
         for cnote in closes:
             if cnote.get("read_he"):
                 st.markdown(f"- {cnote['read_he']} _({cnote.get('_date')})_")
-    st.caption("🪜 סולם-הצנרת המלא (מי מתקרב לסלוט, שערים וטריות) עבר לטאב 🚪 תור-VIP — "
-               "כאן מנהלים רק מה שחי.")
+    # ── the night's events, one honest summary (owner 31.07: the old
+    # "departed since yesterday" line carried partial information) ────────
     gone = board.get("departed_since_prev") or []
-    if gone:
-        st.info("🚪 עזבו את הצנרת מאתמול: "
-                + " · ".join(f"**{g['ticker']}** — {g['reason']}" for g in gone))
-    with st.expander("📓 פנקס-העסקאות שלי — רישום עסקת-אמת (D1)"):
+    _nb = acct.get("not_bought_today") or []
+    _ev = [e for e in (acct.get("events") or [])
+           if str(e.get("date") or "") == str(board.get("date") or "")]
+    _buys = [e for e in _ev if str(e.get("action")) == "buy"]
+    _sells = [e for e in _ev if str(e.get("action")) in ("sell", "forced_sell")]
+    if gone or _nb or _buys or _sells:
+        st.markdown("#### 📋 מה קרה הלילה")
+        if _buys:
+            st.markdown("- **נפתחו:** " + " · ".join(
+                f"{e.get('ticker')} @ {e.get('price')}" for e in _buys))
+        if _sells:
+            st.markdown("- **נסגרו:** " + " · ".join(
+                f"{e.get('ticker')} ({e.get('reason')})" for e in _sells))
+        if gone:
+            st.markdown("- **ירדו מהמעקב:** " + " · ".join(
+                f"{g['ticker']} — {g['reason']}" for g in gone[:6]))
+        if _nb:
+            _by_reason: dict[str, list[str]] = {}
+            for x in _nb:
+                _by_reason.setdefault(str(x.get("reason"))[:60],
+                                      []).append(str(x.get("ticker")))
+            st.markdown("- **לא נקנו, ולמה:** " + " · ".join(
+                f"{', '.join(v[:4])} — {k}"
+                for k, v in list(_by_reason.items())[:4]))
+        st.caption("כל שם שנפסל מקבל סיבה — אין דחייה שקטה.")
+    with st.expander("📓 פנקס ידני (רזרבה — היומן האוטומטי למעלה)"):
         st.caption("רישום בלבד; המנוע מצרף בלילה את מה שהמכונה אמרה באותו יום, ובסגירה — "
                    "תוצאה ו-post-mortem. לא ייעוץ, לא פקודה.")
         c1, c2, c3, c4 = st.columns(4)
@@ -1046,23 +1077,18 @@ def _vip_dossier_line(t: str) -> None:
 
 
 def _vip_tab() -> None:
-    st.caption("👑 **מה זה המסך הזה:** חדר-הבדיקה. המניות שכבר הבשילו מקבלות "
-               "כאן ניתוח-עומק יומי, ובתחנות קבועות נופלת החלטת-צל (קנייה-על-נייר/"
-               "המתנה/דחייה). קריאה בלבד — אין כאן כפתורי פעולה.  \n"
-               "**המסלול המלא:** 📡 רשימות ← 🚪 תור ← 👑 בדיקת-עומק (כאן) ← 💼 סלוט")
     q = _latest_note("vip_board")
     if not q:
         st.info("אין עדיין תצלום-VIP — הריצה הלילית תייצר אותו")
         return
-    cap = q.get("capacity") or {}
-    c1, c2, c3 = st.columns(3)
-    c1.metric("👑 קיבולת VIP", cap.get("vip", "—"))
-    c2.metric("🔬 בניתוח-עומק", cap.get("deep", "—"))
-    c3.metric("💥 החלטות הלילה", len(q.get("decisions") or []))
+    # the capacity metrics live in the tab header + the top ribbon; repeating
+    # them as three giant tiles was the "dashboard that says nothing" (31.07)
     members = q.get("members") or []
     deep = [m for m in members if str(m.get("status", "")).startswith(
         ("DEEP", "DECISION", "CONTINUE_DEEP", "SHADOW_BUY"))]   # decided members keep their card
-    st.markdown("#### תור-העומק — שני מפתחות, מנעול אחד")
+    st.markdown("#### 🔬 בניתוח-עומק — כל שם, כרטיס אחד")
+    st.caption("לחיצה על שם פותחת את הכרטיס המלא: שני-המפתחות, השערים, "
+               "הרמות והניתוח. סגור = אין מה שדורש את תשומת-לבך כרגע.")
     if not deep:
         st.caption("אין שמות בעומק כרגע — ההבשלה עובדת.")
     for m in deep:
@@ -1192,13 +1218,16 @@ def _vip_tab() -> None:
                        f'{ev.get("valid_days", 0)}/{ev.get("total_days", 0)} ימים תקפים, '
                        f'מחיר {fresh}</div>')
         _nsh = str(m.get("next_step_he") or "")
-        st.markdown(
-            f'<div class="papow-card"><span class="tkr">{m.get("ticker")}</span> '
-            f'{k1}{k2}'
-            + (f'<div class="sub"><b>{_nsh}</b></div>' if _nsh else "")
-            + '</div>', unsafe_allow_html=True)
-        _vip_dossier_line(str(m.get("ticker")))
-        with st.expander(f"🔬 הפירוט הטכני המלא של {m.get('ticker')}"):
+        # ONE expander per name: the headline (name + two keys + the single
+        # sentence that says what it waits for) is the closed title; the
+        # whole analysis lives inside. No scrolling wall (owner 31.07).
+        _t0 = str(m.get("ticker"))
+        _k1s = "🔑✅" if "on" in k1 else "🔑⚠️"
+        _k2s = ("🔑✅" if 'key on' in k2 or "on\">🔑 איכותני · BUY" in k2
+                else "🔑⏳" if "צובר" in k2 else "🔑⛔")
+        with st.expander(f"{_k1s}{_k2s}  {_t0} — {_nsh[:80] or stage}"):
+            st.markdown(f'{k1}{k2}', unsafe_allow_html=True)
+            _vip_dossier_line(_t0)
             st.markdown(
                 f'{mag}{beh} <span class="papow-stage">{stage}</span>'
                 f'<div class="sub">מוכנות-מסחר {m.get("maturity")}{gate}'
@@ -1206,14 +1235,13 @@ def _vip_tab() -> None:
                 f'{m.get("days_analyzed")} → תחנה {m.get("next_station")} · מקור: '
                 f'{m.get("source")}{read}</div>{axes_ln}{attr_ln}{need_ln}',
                 unsafe_allow_html=True)
-            _render_memory(str(m.get("ticker")))
-            _render_deep_notes(str(m.get("ticker")))
+            _render_memory(_t0)
+            _render_deep_notes(_t0)
     for d in q.get("decisions") or []:
         mv, qv = d.get("metric_vector") or {}, d.get("qual_vector") or {}
         st.success(f"💥 {d.get('ticker')}: **{d.get('decision')}** · מטרי "
                    f"{'✅' if mv.get('pass') else '❌'} · איכותני "
                    f"{'✅' if qv.get('pass') else '❌'} — {d.get('explanation')}")
-    st.caption("תור-הכניסה המלא (מבשילים, מקורות, קודי-סיבה, תזות) — בטאב 🚪 תור-VIP.")
 
 
 def _idea_action(idea_id: str, action: str, notes: str = "") -> None:
@@ -1887,30 +1915,37 @@ def _watchlists_tab() -> None:
         if wl.get("_pipe_header"):
             st.markdown(f"### {_PIPE_HE[str(wl['_pipe_header'])]}")
             continue
-        st.markdown(f"**[{wl.get('provenance')}·{wl.get('basis')}] {wl.get('kind')}** — "
-                    f"{wl.get('purpose')}")
-        _mat = (wl.get("typing") or {}).get("maturation")
-        if _mat:
-            st.caption(f"🪜 **תנאי-ההעפלה:** {_mat}")
-        if wl.get("members"):
-            df = pd.DataFrame(wl["members"]).rename(columns={
-                "ret_20d": "חודש-מסחר % ★", "ret_1d": "יום %", "ret_5d": "שבוע %"})
-            st.dataframe(df, use_container_width=True, hide_index=True)
-        for _vp in wl.get("vip_prep") or []:       # ecosystem research: the
-            # leader's pre-declared VIP conditions (owner 31.07: paid-for LLM
-            # output must be SEEN, not archived)
-            st.caption(f"🔬 תנאי-VIP מהמחקר: {_vp}")
-        typing = wl.get("typing") or {}
-        filled = sum(1 for f in _typ_he
-                     if typing.get(f) or (f in _top_level and wl.get(f)))
-        st.caption(f"⚖️ {wl.get('measurement_hook')} · 🏷️ טיפוס {filled}/{len(_typ_he)}"
-                   + ("" if filled == len(_typ_he)
-                      else " (חלקי — סימן-בדיקה, לא פסילה)"))
-        if typing:
-            with st.expander(f"🏷️ תעודת-הזהות של הרשימה ({wl.get('kind')})"):
+        # ONE collapsed row per list: name + size + the maturation condition
+        # in the title. Open it for the members. (owner 31.07: "אני גולל שעה")
+        _mat = str((wl.get("typing") or {}).get("maturation") or "")
+        with st.expander(f"📋 {wl.get('kind')} · {wl.get('n', 0)} שמות"
+                         + (f" · 🪜 {_mat[:70]}" if _mat else "")):
+            st.caption(f"**מטרה:** {wl.get('purpose')}")
+            if _mat:
+                st.caption(f"🪜 **תנאי-ההעפלה לפייפליין:** {_mat}")
+            if wl.get("filter"):
+                st.caption(f"🔎 **הסינון:** {wl.get('filter')}")
+            if wl.get("members"):
+                df = pd.DataFrame(wl["members"]).rename(columns={
+                    "ret_20d": "חודש-מסחר % ★", "ret_1d": "יום %",
+                    "ret_5d": "שבוע %"})
+                st.dataframe(df, use_container_width=True, hide_index=True)
+            for _vp in wl.get("vip_prep") or []:   # ecosystem research: the
+                # leader's pre-declared VIP conditions (owner 31.07: paid-for
+                # LLM output must be SEEN, not archived)
+                st.caption(f"🔬 תנאי-VIP מהמחקר: {_vp}")
+            typing = wl.get("typing") or {}
+            filled = sum(1 for f in _typ_he
+                         if typing.get(f) or (f in _top_level and wl.get(f)))
+            st.caption(f"⚖️ {wl.get('measurement_hook')} · 🏷️ טיפוס "
+                       f"{filled}/{len(_typ_he)}"
+                       + ("" if filled == len(_typ_he)
+                          else " (חלקי — סימן-בדיקה, לא פסילה)"))
+            if typing:
                 for f in _typ_he:
                     v = typing.get(f) or (wl.get(f) if f in _top_level else None)
-                    st.markdown(f"- **{_typ_he[f]}:** {v or '— חסר'}")
+                    if v:
+                        st.markdown(f"- **{_typ_he[f]}:** {v}")
 
 
 _ALIGN_HE = {"confirmed": ("מגובה-חדשות", "volt"),
@@ -2163,7 +2198,7 @@ def _improvement_tab() -> None:
         st.markdown("#### 🪪 זירת תיק-הזהות — האם ההקשר משפר את השיפוט?")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("זוגות (עם/בלי)", ar.get("pairs_total", 0))
-        c2.metric("נמדדו מול הטייפ", ar.get("pairs_graded", 0))
+        c2.metric("נמדדו מול מהלכי-המחירים", ar.get("pairs_graded", 0))
         c3.metric("ימי-מחלוקת", ar.get("pairs_diverged", 0))
         c4.metric("רצפת-פסיקה",
                   "✅ הושגה" if ar.get("verdict_floor_met") else "⏳ נבנית")
@@ -2386,11 +2421,20 @@ def _vip_pipeline_tab() -> None:
 def _extreme_pipeline_tab() -> None:
     """⚡ Extreme — asymmetry: armed springs, release triggers, tickets,
     the pool — and the containment that keeps it honest."""
-    st.caption("**עץ-ההחלטה של הפייפליין:** 🌀 רשימת-הקפיצים (צירוף דחיסה × "
-               "לחץ-שורט, ציון ≥0.55) ← חימוש-לילי עם טווח-הדחיסה ← סגירה "
-               "מחוץ לטווח ±2% = **כרטיס עם השבירה** (לונג בפריצה / שורט "
-               "בשבירה) ← סטופ בצד השני של הטווח (עד 8%) ← יציאה כפויה תוך "
-               "4 סשנים. מקסימום 2 כרטיסים ללילה; ספר-נייר נפרד.")
+    st.info("**מה הפייפליין הזה מחפש:** מניה שאגרה אנרגיה — קפצה חזק, ואז "
+            "נדחסה לטווח צר בזמן שממשיכים לסחור בה בהיקפים עצומים, **ובמקביל** "
+            "יש נגדה הימור-שורט שגדל. הצירוף הזה לא מנבא כיוון — הוא מנבא "
+            "**עוצמה**: כשהטווח נשבר, המהלך אלים לשני הצדדים.")
+    st.markdown("**עץ-ההחלטה — שלושה תנאים, כל אחד מדיד:**")
+    st.markdown(
+        "1. **דחיסה** — מהלך ≥12% ואז 3 ימים בטווח ≤5%, על מחזור ≥$50M ליום "
+        "(אנרגיה אגורה, לא שקט של חוסר-עניין).\n"
+        "2. **לחץ** — הימור-שורט אמיתי: הדלתא (השורט **גדל**) היא הסיגנל "
+        "המרכזי; רמת-השורט, ימי-הכיסוי וזרם-השורט היומי הם ההקשר.\n"
+        "3. **הטריגר לעסקה** — סגירה **מחוץ** לטווח-הדחיסה ב-±2%: פריצה ⇒ "
+        "כרטיס-לונג, שבירה ⇒ כרטיס-שורט. בלי שבירה אין עסקה, נקודה.\n\n"
+        "**ניהול הכרטיס:** סטופ בצד השני של הטווח (חסום ב-8%), יציאה כפויה "
+        "תוך 4 סשנים, מקסימום 2 כרטיסים ללילה, ספר-נייר נפרד מ-VIP.")
     _rd = _latest_note("pipeline_radar") or {}
     for _c in (_rd.get("extreme") or {}).get("candidates") or []:
         st.markdown(f"**🎯 {_c.get('ticker')}** — {_c.get('doing_he')}")
@@ -2465,7 +2509,7 @@ def _regime_tab() -> None:
                      hide_index=True)
     tape = m.get("tape_story") or {}
     if tape.get("market_paragraph"):
-        st.markdown("#### 📰 קריאת-הטייפ")
+        st.markdown("#### 📰 מה המחירים עשו בפועל")
         st.info(tape["market_paragraph"])
         if tape.get("stocks_paragraph"):
             st.info(tape["stocks_paragraph"])
@@ -2474,29 +2518,37 @@ def _regime_tab() -> None:
             st.caption(f"מאזן: {led.get('confirmed', 0)} מגובי-חדשות · "
                        f"{led.get('contradicted', 0)} בניגוד · "
                        f"{led.get('no_news_move', 0)} בלי סיפור")
-        _story_cards(tape)
-    st.markdown("#### 💸 זרימות-הכסף והעדשה-ההתנהגותית")
-    flows = []
-    for key, icon in (("locomotive_mix", "🚂"), ("sector_rotation", "🔄"),
-                      ("smart_money_pulse", "🫀")):
-        blk = m.get(key) or {}
-        if blk.get("read_he"):
-            flows.append(f"- {icon} {blk['read_he']}")
-    if flows:
-        st.markdown("\n".join(flows))
+        with st.expander("🔍 ניתוח-הנכסים המוביל (מי הזיז ומה ההיגיון מאחוריו)"):
+            st.caption("ניתוח זה מוזן לניתוחי-העומק של המועמדות ולסיפורי-היום "
+                       "— לא יתום.")
+            _story_cards(tape)
+    with st.expander("💸 זרימות-הכסף — לאן הכסף הגדול זז"):
+        flows = []
+        for key, icon, _lbl in (("locomotive_mix", "🚂", "קטר-השוק"),
+                                ("sector_rotation", "🔄", "רוטציה"),
+                                ("smart_money_pulse", "🫀", "דופק-הכסף")):
+            blk = m.get(key) or {}
+            if blk.get("read_he"):
+                flows.append(f"- {icon} **{_lbl}:** {blk['read_he']}")
+        st.markdown("\n".join(flows) if flows
+                    else "אין קריאות-זרימה במפה הנוכחית.")
     beh = _latest_note("behavior_states")
     if beh:
-        tally: dict[str, int] = {}
-        for t, states in list(beh.items())[:40]:
-            if isinstance(states, list):
-                for s0 in states:
-                    n0 = s0.get("state") if isinstance(s0, dict) else str(s0)
-                    tally[str(n0)] = tally.get(str(n0), 0) + 1
-        if tally:
-            st.markdown("**תצפיות-התנהגות הלילה:** " + " · ".join(
-                f"{_BEHAV_HE.get(k, k)}×{v}"
-                for k, v in sorted(tally.items(), key=lambda x: -x[1])[:5]))
-        st.caption("עדשה-שלישית, תצפית בלבד — לא שער.")
+        with st.expander("🧬 העדשה-ההתנהגותית — איך מניות מתנהגות סביב רמות"):
+            st.caption("מה זה: תצפית על **דפוסי-התנהגות** של מניות (למשל: "
+                       "נסיגות נקנות, פריצות-שווא, מוכר-סמוי) — עדשה שלישית "
+                       "לצד המחיר וזרימות-הכסף. **תצפית בלבד**: המתאם שלה "
+                       "לתוצאות נמדד ביומן ועדיין לא הפך לשער-החלטה.")
+            tally: dict[str, int] = {}
+            for t, states in list(beh.items())[:40]:
+                if isinstance(states, list):
+                    for s0 in states:
+                        n0 = s0.get("state") if isinstance(s0, dict) else str(s0)
+                        tally[str(n0)] = tally.get(str(n0), 0) + 1
+            if tally:
+                st.markdown("**הלילה נצפו:** " + " · ".join(
+                    f"{_BEHAV_HE.get(k, k)} ×{v}"
+                    for k, v in sorted(tally.items(), key=lambda x: -x[1])[:6]))
     for k, v in (m.get("caveats") or {}).items():
         st.caption(f"⚠️ {k}: {v}")
 
