@@ -692,19 +692,34 @@ def _slots_tab() -> None:
                         + (f"- **מקור:** {_r.get('feed')}\n"
                            if _r.get("feed") else ""))
                     _mm = _memos.get(_tk0)
-                    if _mm:
+                    _memo_txt = str((_mm or {}).get("content") or "")
+                    if _memo_txt:
                         st.markdown("---")
-                        st.markdown(str(_mm.get("content") or ""))
+                        st.markdown(_memo_txt)
                     else:
                         st.caption("מזכר-העסקה המלא ייכתב בריצה הלילית הקרובה.")
                     _dos = next((n for n in _raw_notes_of("ticker_dossier", 12)
                                  if _tk0 in str(n.get("title") or "")), None)
-                    if _dos:
-                        with st.expander(f"📚 כל מה שהמערכת יודעת על {_tk0}"):
-                            st.markdown(str(_dos.get("content") or "")[:60000])
-                            st.caption("דחיפת-כול: ניתוחי-העומק המלאים, "
-                                       "השערים והסיבות, הרשימות ותנאיהן, "
-                                       "מדד-ההשפעה, הטיוטות ויומן-ההחלטות.")
+                    _dos_txt = str((_dos or {}).get("content") or "")
+                    if _memo_txt or _dos_txt:
+                        # ONE copy button with the memo (levels included) AND
+                        # the raw intel — the owner feeds this straight to a
+                        # model that organises it (his 01.08 workflow)
+                        _plan_txt = (
+                            f"TICKER: {_tk0}\nPIPELINE: {_he}\n"
+                            f"ENTRY: {_e0} · STOP: {_stop} ({_sp:.0f}%) · "
+                            f"RISK/SHARE: {_risk:.2f}\nTP LADDER: "
+                            + " · ".join(
+                                f"{round(_e0 + _sgn * _risk * _m, 2)} ({_m}R)"
+                                for _m in (1, 2, 3)) + "\n\n")
+                        with st.expander(f"📋 העתקה למכונה — כל החומר על "
+                                         f"{_tk0} (מזכר + רמות + גולמי)"):
+                            st.caption("לחיצה על אייקון-ההעתקה בפינת הבלוק "
+                                       "מעתיקה הכול: תוכנית-העסקה, המזכר "
+                                       "והמידע הגולמי המלא.")
+                            st.code(_plan_txt + _memo_txt + "\n\n"
+                                    + "=" * 60 + "\n\n" + _dos_txt,
+                                    language="markdown")
             for _ in range(max(0, _cap - len(_rows))):
                 st.caption("⚪ פנוי")
     st.caption("סלוט ריק הוא הצלחה, לא כישלון · ספרים נפרדים, כלל-אל-חטיפה חל. "
