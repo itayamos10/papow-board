@@ -657,6 +657,8 @@ def _slots_tab() -> None:
         ("⚡ Extreme", 2, (_pools.get("extreme") or {}).get("open_rows") or [],
          "קפיצים · יציאה כפויה ב-4 סשנים"),
     ]
+    _memos = {str(n.get("title", "")).split(" ")[0]: n
+              for n in _raw_notes_of("position_post", 12)}
     for _col, (_he, _cap, _rows, _sub) in zip(_cols, _specs, strict=False):
         with _col:
             st.markdown(f"**{_he}** — {len(_rows)}/{_cap} תפוסים")
@@ -664,14 +666,41 @@ def _slots_tab() -> None:
             for _r in _rows:
                 _dir = "🔻" if _r.get("direction") == "short" else "🔺"
                 _pnl = _r.get("ret_pct")
-                st.markdown(f"{_dir} **{_r.get('ticker')}** @ "
-                            f"{_r.get('entry')}"
-                            + (f" · {_pnl:+.1f}%" if _pnl is not None else "")
-                            + (f" · יום {_r.get('sessions_held')}"
-                               if _r.get("sessions_held") is not None else ""))
+                _tk0 = str(_r.get("ticker"))
+                with st.expander(f"{_dir} {_tk0} @ {_r.get('entry')}"
+                                 + (f" · {_pnl:+.1f}%" if _pnl is not None
+                                    else "")):
+                    _e0 = float(_r.get("entry") or 0)
+                    _sp = abs(float(_r.get("stop_pct") or 8))
+                    _sgn = -1 if _r.get("direction") == "short" else 1
+                    _stop = round(_e0 * (1 - _sgn * _sp / 100), 2)
+                    _risk = abs(_e0 - _stop)
+                    st.markdown(
+                        f"- **מסלול:** {_he}\n"
+                        f"- **כניסה:** {_e0} · **מחיר אחרון:** "
+                        f"{_r.get('last_px') or '—'}"
+                        + (f" ({_pnl:+.1f}%)" if _pnl is not None else "") + "\n"
+                        f"- **סטופ:** {_stop} ({_sp:.0f}%) · סיכון למניה "
+                        f"{_risk:.2f}\n"
+                        f"- **סולם-יעדים:** "
+                        + " · ".join(
+                            f"{round(_e0 + _sgn * _risk * _m, 2)} ({_m}R)"
+                            for _m in (1, 2, 3)) + "\n"
+                        f"- **סשן:** {_r.get('sessions_held', 0)}"
+                        + (f"/{4 if 'Extreme' in _he else 25}"
+                           if "VIP" not in _he else "") + "\n"
+                        + (f"- **מקור:** {_r.get('feed')}\n"
+                           if _r.get("feed") else ""))
+                    _mm = _memos.get(_tk0)
+                    if _mm:
+                        st.markdown("---")
+                        st.markdown(str(_mm.get("content") or ""))
+                    else:
+                        st.caption("מזכר-העסקה המלא ייכתב בריצה הלילית הקרובה.")
             for _ in range(max(0, _cap - len(_rows))):
                 st.caption("⚪ פנוי")
-    st.caption("סלוט ריק הוא הצלחה, לא כישלון · ספרים נפרדים, כלל-אל-חטיפה חל.")
+    st.caption("סלוט ריק הוא הצלחה, לא כישלון · ספרים נפרדים, כלל-אל-חטיפה חל. "
+               "לחיצה על עסקה פותחת את התוכנית המלאה שלה.")
     # market-map strip -> Lead/regime tabs; day stories -> the stories tab
     # (owner 31.07: "להוריד מכאן כל מה שלא רלוונטי לעסקה")
     _rc = _latest_note("regime_contract") or {}
