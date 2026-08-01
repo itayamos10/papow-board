@@ -697,6 +697,14 @@ def _slots_tab() -> None:
                         st.markdown(str(_mm.get("content") or ""))
                     else:
                         st.caption("מזכר-העסקה המלא ייכתב בריצה הלילית הקרובה.")
+                    _dos = next((n for n in _raw_notes_of("ticker_dossier", 12)
+                                 if _tk0 in str(n.get("title") or "")), None)
+                    if _dos:
+                        with st.expander(f"📚 כל מה שהמערכת יודעת על {_tk0}"):
+                            st.markdown(str(_dos.get("content") or "")[:60000])
+                            st.caption("דחיפת-כול: ניתוחי-העומק המלאים, "
+                                       "השערים והסיבות, הרשימות ותנאיהן, "
+                                       "מדד-ההשפעה, הטיוטות ויומן-ההחלטות.")
             for _ in range(max(0, _cap - len(_rows))):
                 st.caption("⚪ פנוי")
     st.caption("סלוט ריק הוא הצלחה, לא כישלון · ספרים נפרדים, כלל-אל-חטיפה חל. "
