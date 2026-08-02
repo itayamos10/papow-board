@@ -560,7 +560,9 @@ def _stories_tab() -> None:
                 st.markdown(str(_s0.get("body") or ""))
         st.caption(str(_ds.get("boundary_he") or ""))
         st.divider()
-    posts = _raw_notes_of("name_post") + _raw_notes_of("community_post")
+    # 01.08: the retired Hebrew name_post factory is NOT read any more —
+    # only the English TradingView memos (tv_post) and the trade memos
+    posts = _raw_notes_of("tv_post") + _raw_notes_of("position_post")
     posts.sort(key=lambda p0: str(p0.get("date")), reverse=True)
     if posts:
         st.markdown("### 🎯 פוסטים-של-שם (טיוטות)")
