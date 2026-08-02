@@ -593,8 +593,12 @@ def _radar_section() -> None:
         if not _cands:
             st.caption("אין מועמדת בטווח-יומיים — הפייפליין צובר, לא דוחף")
         for _c in _cands:
-            with st.expander(f"🎯 {_c.get('ticker')} — עוד "
-                             f"~{_c.get('eta_days', '?')} ימים"):
+            _eta = _c.get("eta_days")
+            _eta_he = ("היום — התנאי יכול להיסגר בסשן הקרוב" if _eta == 0
+                       else "מחר" if _eta == 1
+                       else f"בעוד ~{_eta} סשנים" if _eta is not None
+                       else "מועד לא ידוע")
+            with st.expander(f"🎯 {_c.get('ticker')} — {_eta_he}"):
                 for _lbl, _key in (("מי היא", "who_he"),
                                    ("מה היא עושה", "doing_he"),
                                    ("למה מועמדת", "why_he"),
@@ -633,7 +637,6 @@ def _slots_tab() -> None:
     st.caption("💼 **שולחן-העסקאות** — שמונה סלוטים בשלושה מסלולים: "
                "👑 VIP (4) · 🦅 Lead (2) · ⚡ Extreme (2). "
                "⚪ פנוי = יש מקום, לא המלצה לקנות.")
-    _radar_section()
     acct = _latest("account_snapshots") or {}
     board = acct.get("slot_board") or {}
     if not board:
@@ -673,24 +676,38 @@ def _slots_tab() -> None:
                                  + (f" · {_pnl:+.1f}%" if _pnl is not None
                                     else "")):
                     _e0 = float(_r.get("entry") or 0)
-                    _sp = abs(float(_r.get("stop_pct") or 8))
                     _sgn = -1 if _r.get("direction") == "short" else 1
-                    _stop = round(_e0 * (1 - _sgn * _sp / 100), 2)
-                    _risk = abs(_e0 - _stop)
+                    # the STORED stop wins — never recompute a different
+                    # number from the one the trade was opened with
+                    _stop = float(_r.get("stop") or
+                                  round(_e0 * (1 - _sgn * abs(float(
+                                      _r.get("stop_pct") or 8)) / 100), 2))
+                    _sp = abs(_stop / _e0 - 1) * 100 if _e0 else 0.0
+                    _risk = float(_r.get("risk_per_share") or abs(_e0 - _stop))
+                    _tg = _r.get("targets") or [
+                        round(_e0 + _sgn * _risk * _m, 2) for _m in (1, 2, 3)]
+                    _cap_s = 4 if "Extreme" in _he else (
+                        25 if "Lead" in _he else 20)
+                    _held = int(_r.get("sessions_held") or 0)
+                    _left = max(0, _cap_s - _held)
                     st.markdown(
                         f"- **מסלול:** {_he}\n"
-                        f"- **כניסה:** {_e0} · **מחיר אחרון:** "
-                        f"{_r.get('last_px') or '—'}"
+                        f"- **כניסה:** {_e0} ({_r.get('when_open') or '—'}) · "
+                        f"**מחיר אחרון:** {_r.get('last_px') or '—'}"
                         + (f" ({_pnl:+.1f}%)" if _pnl is not None else "") + "\n"
-                        f"- **סטופ:** {_stop} ({_sp:.0f}%) · סיכון למניה "
+                        f"- **סטופ:** {_stop} ({_sp:.1f}%) · סיכון למניה "
                         f"{_risk:.2f}\n"
                         f"- **סולם-יעדים:** "
-                        + " · ".join(
-                            f"{round(_e0 + _sgn * _risk * _m, 2)} ({_m}R)"
-                            for _m in (1, 2, 3)) + "\n"
-                        f"- **סשן:** {_r.get('sessions_held', 0)}"
-                        + (f"/{4 if 'Extreme' in _he else 25}"
-                           if "VIP" not in _he else "") + "\n"
+                        + " · ".join(f"{p} ({m}R)"
+                                     for p, m in zip(_tg, (1, 2, 3),
+                                                     strict=False))
+                        + ("  ✂️ בוצע מימוש ב-1R"
+                           if _r.get("trimmed") else "") + "\n"
+                        f"- **שעון:** סשן {_held} מתוך {_cap_s} · "
+                        + ("**יציאה כפויה היום**" if _left == 0
+                           else f"נותרו {_left} סשנים עד היציאה הכפויה") + "\n"
+                        + (f"- **הסיבה לכניסה:** {_r.get('why_he')}\n"
+                           if _r.get("why_he") else "")
                         + (f"- **מקור:** {_r.get('feed')}\n"
                            if _r.get("feed") else ""))
                     _mm = _memos.get(_tk0)
@@ -726,6 +743,8 @@ def _slots_tab() -> None:
                 st.caption("⚪ פנוי")
     st.caption("סלוט ריק הוא הצלחה, לא כישלון · ספרים נפרדים, כלל-אל-חטיפה חל. "
                "לחיצה על עסקה פותחת את התוכנית המלאה שלה.")
+    st.divider()
+    _radar_section()      # what is CLOSE comes AFTER what is OPEN (owner 01.08)
     # market-map strip -> Lead/regime tabs; day stories -> the stories tab
     # (owner 31.07: "להוריד מכאן כל מה שלא רלוונטי לעסקה")
     _rc = _latest_note("regime_contract") or {}
